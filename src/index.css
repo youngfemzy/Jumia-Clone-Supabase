@@ -1,0 +1,35 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+
+  /* Set primary brand colors exactly matching Geometric Balance template style */
+  --color-orange-50: #fef8f0;
+  --color-orange-105: #fdf0df;
+  --color-orange-500: #f68b1e;
+  --color-orange-600: #e07612;
+  --color-orange-700: #b55c0a;
+  
+  /* Background styling custom grey */
+  --color-gray-55: #f1f1f2;
+}
+
+/* Base element overrides for the geometric styling scheme */
+body {
+  background-color: #f1f1f2;
+  font-family: var(--font-sans);
+}
+
+/* Sharp linear geometric cards visual structure */
+.geo-border-balance {
+  border-radius: 6px;
+  border-width: 1px;
+  border-color: #e5e7eb;
+}
+
+.bg-flash-sale {
+  background-color: #e61601;
+}
+

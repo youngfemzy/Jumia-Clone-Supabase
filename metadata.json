@@ -1,0 +1,6 @@
+{
+  "name": "Multivendor Marketplace",
+  "description": "A modern Jumia-inspired multivendor e-commerce marketplace supporting multiple product categories, cart, checkout, vendor dashboards, and admin management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
