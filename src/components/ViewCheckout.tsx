@@ -32,9 +32,9 @@ export const ViewCheckout: React.FC<ViewCheckoutProps> = ({ onNavigate }) => {
   useEffect(() => {
     if (placedOrderId) {
       window.scrollTo(0, 0);
-      onNavigate(currentUser?.role === 'vendor' ? 'vendor-dashboard' : 'dashboard', { tab: 'orders' });
+      onNavigate('order-confirmation', { orderId: placedOrderId });
     }
-  }, [placedOrderId, currentUser, onNavigate]);
+  }, [placedOrderId, onNavigate]);
 
   const cartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
 
