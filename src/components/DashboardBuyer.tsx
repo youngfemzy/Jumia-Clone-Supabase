@@ -3,7 +3,7 @@ import { useShop } from '../context/ShopContext';
 import { Package, Truck, CheckCircle, Clock, ShoppingBag, MapPin, ChevronRight } from 'lucide-react';
 import { Order } from '../types';
 
-export const DashboardBuyer: React.FC = () => {
+export const DashboardBuyer: React.FC<{ onNavigate: (view: string, params?: any) => void }> = ({ onNavigate }) => {
   const { orders, currentUser } = useShop();
 
   const userOrders = orders.filter(o => o.buyer_id === currentUser?.id);
@@ -99,7 +99,10 @@ export const DashboardBuyer: React.FC = () => {
                   </div>
 
                   <div className="md:border-l border-gray-100 md:pl-6 flex items-center">
-                    <button className="w-full md:w-auto px-6 py-2.5 bg-gray-50 hover:bg-gray-100 text-gray-700 text-[10px] font-extrabold uppercase tracking-widest rounded-lg transition flex items-center justify-center space-x-2 cursor-pointer">
+                    <button 
+                      onClick={() => onNavigate('order-confirmation', { orderId: order.id })}
+                      className="w-full md:w-auto px-6 py-2.5 bg-gray-50 hover:bg-gray-100 text-gray-700 text-[10px] font-extrabold uppercase tracking-widest rounded-lg transition flex items-center justify-center space-x-2 cursor-pointer"
+                    >
                       <span>View Details</span>
                       <ChevronRight className="w-3 h-3" />
                     </button>

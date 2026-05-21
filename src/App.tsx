@@ -15,6 +15,7 @@ import { ViewStorefront } from './components/ViewStorefront';
 import { DashboardVendor } from './components/DashboardVendor';
 import { DashboardAdmin } from './components/DashboardAdmin';
 import { DashboardBuyer } from './components/DashboardBuyer';
+import { ViewOrderConfirmation } from './components/ViewOrderConfirmation';
 import { PROMOTIONS } from './data/dummyData';
 import { CATEGORIES, CategoryType } from './types';
 import { 
@@ -392,7 +393,7 @@ const AppContent: React.FC = () => {
             {/* 8. BUYER DASHBOARD */}
             {navigation.view === 'buyer-dashboard' && (
               currentUser ? (
-                <DashboardBuyer />
+                <DashboardBuyer onNavigate={handleNavigate} />
               ) : (
                 <div className="max-w-md mx-auto py-16 px-4 text-center space-y-4">
                   <div className="bg-amber-50 p-6 rounded-xl border border-amber-200">
@@ -438,6 +439,14 @@ const AppContent: React.FC = () => {
                   </button>
                 </div>
               )
+            )}
+
+            {/* 11. ORDER CONFIRMATION / DETAIL VIEW */}
+            {navigation.view === 'order-confirmation' && (
+              <ViewOrderConfirmation 
+                orderId={navigation.params?.orderId} 
+                onNavigate={handleNavigate} 
+              />
             )}
 
           </motion.div>
