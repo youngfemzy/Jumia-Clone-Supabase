@@ -2,7 +2,27 @@ import React, { useState, useEffect } from 'react';
 import { useShop } from '../context/ShopContext';
 import { useToast } from '../context/ToastContext';
 import { CreditCard, MapPin, Truck, CheckCircle2, ArrowLeft, Database, Phone, User as UserIcon, RefreshCw } from 'lucide-react';
-import { usePaystackPayment } from 'react-paystack';
+
+interface PaystackConfig {
+  reference: string;
+  email: string;
+  amount: number;
+  publicKey: string;
+}
+
+function usePaystackPayment(config: PaystackConfig) {
+  return ({ onSuccess, onClose }: { onSuccess: (ref: any) => void; onClose: () => void }) => {
+    const handler = (window as any).PaystackPop.setup({
+      key: config.publicKey,
+      email: config.email,
+      amount: config.amount,
+      ref: config.reference,
+      callback: onSuccess,
+      onClose,
+    });
+    handler.openIframe();
+  };
+}
 
 interface ViewCheckoutProps {
   onNavigate: (view: string, params?: any) => void;
