@@ -1108,22 +1108,29 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updateOrderPayment = async (orderId: string, reference: string, status: string = 'paid') => {
     if (isConnected && supabase) {
       try {
+        console.log(`[ShopContext] Updating payment for order ${orderId} (ref: ${reference})`);
+        
+        const payload = filterPayloadForTable({ 
+          status, 
+          payment_reference: reference 
+        }, detectedOrderColumns);
+
         const { error } = await supabase
           .from('orders')
-          .update({ 
-            status, 
-            payment_reference: reference 
-          })
+          .update(payload)
           .eq('id', orderId);
 
-        if (error) throw error;
+        if (error) {
+          console.error("[ShopContext] Update order payment error from Supabase:", error);
+          throw error;
+        }
         
         setOrders(prev => prev.map(o => 
           o.id === orderId ? { ...o, status, payment_reference: reference } : o
         ));
         return true;
       } catch (err: any) {
-        console.error("[ShopContext] Update order payment error:", err);
+        console.error("[ShopContext] Update order payment critical catch:", err);
         return false;
       }
     }

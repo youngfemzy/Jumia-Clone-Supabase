@@ -63,6 +63,12 @@ USING (
     )
 );
 
+-- Policy: Buyers can update their own order status (e.g. to mark as paid after Paystack success)
+CREATE POLICY "Buyers can update own orders" 
+ON public.orders FOR UPDATE 
+TO authenticated 
+USING (auth.uid() = buyer_id);
+
 -- 5. INDEXES FOR PERFORMANCE
 CREATE INDEX IF NOT EXISTS orders_buyer_id_idx ON public.orders(buyer_id);
 CREATE INDEX IF NOT EXISTS orders_created_at_idx ON public.orders(created_at DESC);

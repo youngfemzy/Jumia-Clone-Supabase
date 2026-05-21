@@ -85,8 +85,16 @@ export const ViewCheckout: React.FC = () => {
       return;
     }
 
+    const paystackKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
+    
+    if (!paystackKey) {
+      toastError("Paystack Public Key is not configured. Please set VITE_PAYSTACK_PUBLIC_KEY in your environment setup.");
+      setSubmitting(false);
+      return;
+    }
+
     const paystackConfig = {
-      key: (import.meta.env.VITE_PAYSTACK_PUBLIC_KEY as string) || 'pk_test_your_fallback_key_here',
+      key: paystackKey,
       email: currentUser?.email || "customer@example.com",
       amount: Math.round(cartTotal * 100), // Amount in kobo
       ref: (new Date()).getTime().toString(),
