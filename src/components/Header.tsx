@@ -57,7 +57,7 @@ export const Header: React.FC<HeaderProps> = ({ activeView, onNavigate }) => {
       <div className="bg-amber-500 text-white text-xs font-medium py-1.5 px-4 flex justify-between items-center text-center">
         <div className="flex items-center space-x-2 mx-auto sm:mx-0">
           <span className="bg-white/20 text-[10px] py-0.5 px-1.5 rounded-full font-bold uppercase tracking-wide">Promo</span>
-          <span>🚚 Free Deliveries in Lagos & Abuja on orders above $50</span>
+          <span>🚚 Free Delivery in Lagos & Abuja on orders above $50</span>
         </div>
         <div className="hidden sm:flex items-center space-x-4">
           <div className="flex items-center space-x-1.5 text-white/90 text-[11px]">
