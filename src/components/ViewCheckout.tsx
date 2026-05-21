@@ -21,6 +21,12 @@ export const ViewCheckout: React.FC<ViewCheckoutProps> = ({ onNavigate }) => {
   const [submitting, setSubmitting] = useState(false);
   const [placedOrderId, setPlacedOrderId] = useState<string | null>(null);
   const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
+  const pendingOrderIdRef = React.useRef<string | null>(null);
+
+  // Sync ref with state just in case, though we primarily set the ref directly for immediate callback access
+  useEffect(() => {
+    pendingOrderIdRef.current = pendingOrderId;
+  }, [pendingOrderId]);
 
   // Redirect on success
   useEffect(() => {
@@ -44,15 +50,17 @@ export const ViewCheckout: React.FC<ViewCheckoutProps> = ({ onNavigate }) => {
 
   const handleSuccess = async (reference: any) => {
     console.log("[Paystack EVENT] handleSuccess reached:", reference);
-    if (pendingOrderId) {
-      console.log("[Paystack EVENT] Processing update for pending order:", pendingOrderId);
+    const orderId = pendingOrderIdRef.current;
+    
+    if (orderId) {
+      console.log("[Paystack EVENT] Processing update for pending order:", orderId);
       setSubmitting(true);
       try {
-        const ok = await updateOrderPayment(pendingOrderId, reference.reference, 'paid');
+        const ok = await updateOrderPayment(orderId, reference.reference, 'paid');
         if (ok) {
           console.log("[Paystack EVENT] Order updated to paid successfully in DB.");
           await clearCart();
-          setPlacedOrderId(pendingOrderId);
+          setPlacedOrderId(orderId);
           toastSuccess("Payment successful and order updated!");
         } else {
           console.error("[Paystack EVENT] updateOrderPayment returned false.");
@@ -65,8 +73,8 @@ export const ViewCheckout: React.FC<ViewCheckoutProps> = ({ onNavigate }) => {
         setSubmitting(false);
       }
     } else {
-      console.warn("[Paystack EVENT] Success reached but pendingOrderId was null!");
-      toastWarning("Payment received but order tracking lost. Please refresh.");
+      console.warn("[Paystack EVENT] Success reached but pendingOrderIdRef was null!");
+      toastWarning("Payment received but order tracking lost. Please check your history.");
       setSubmitting(false);
     }
   };
@@ -113,11 +121,15 @@ export const ViewCheckout: React.FC<ViewCheckoutProps> = ({ onNavigate }) => {
         const res = await placeOrder(completeAddressInfo, undefined, 'pending', true);
         
         if (res.success && res.orderId) {
+          pendingOrderIdRef.current = res.orderId;
           setPendingOrderId(res.orderId);
-          console.log("[Checkout] Initiating Paystack Popup...");
-          // In react-paystack v3.x - v6.x, initializePayment takes (onSuccess, onClose) as positional arguments
-          // We use 'as any' to avoid any conflicting type definitions that might expect only 1 arg
-          (initializePayment as any)(handleSuccess, handleClose);
+          console.log("[Checkout] Initiating Paystack Popup for order:", res.orderId);
+          
+          // In react-paystack v6.0.0, initializePayment takes an object
+          initializePayment({
+            onSuccess: handleSuccess,
+            onClose: handleClose
+          });
         } else {
           toastError(res.error || "Could not initialize order. Please try again.");
           setSubmitting(false);
