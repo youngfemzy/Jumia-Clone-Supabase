@@ -1,7 +1,9 @@
 import React from 'react';
 import { Mail, HelpCircle, ShieldCheck, Truck, RefreshCw } from 'lucide-react';
+import { useShop } from '../context/ShopContext';
 
 export const Footer: React.FC = () => {
+  const { currentUser } = useShop();
   return (
     <footer className="bg-gray-950 text-gray-300 text-sm mt-auto">
       {/* Jumia Style Trust Factors Banner */}
@@ -72,16 +74,18 @@ export const Footer: React.FC = () => {
           </ul>
         </div>
 
-        <div>
-          <h4 className="font-bold text-white text-xs uppercase tracking-wider mb-4">Partner Programs</h4>
-          <ul className="space-y-2 text-xs text-gray-400">
-            <li><a href="#" className="hover:text-white transition">Sell on J-Market</a></li>
-            <li><a href="#" className="hover:text-white transition">Merchant Terms</a></li>
-            <li><a href="#" className="hover:text-white transition">Logistic Hub Partners</a></li>
-            <li><a href="#" className="hover:text-white transition">Affiliate Program</a></li>
-            <li><a href="#" className="hover:text-white transition">API Portal access</a></li>
-          </ul>
-        </div>
+        {currentUser?.role !== 'buyer' && (
+          <div>
+            <h4 className="font-bold text-white text-xs uppercase tracking-wider mb-4">Partner Programs</h4>
+            <ul className="space-y-2 text-xs text-gray-400">
+              <li><a href="#" className="hover:text-white transition">Sell on J-Market</a></li>
+              <li><a href="#" className="hover:text-white transition">Merchant Terms</a></li>
+              <li><a href="#" className="hover:text-white transition">Logistic Hub Partners</a></li>
+              <li><a href="#" className="hover:text-white transition">Affiliate Program</a></li>
+              <li><a href="#" className="hover:text-white transition">API Portal access</a></li>
+            </ul>
+          </div>
+        )}
 
         <div>
           <h4 className="font-bold text-white text-xs uppercase tracking-wider mb-4 font-mono">Subscribe Newsletter</h4>

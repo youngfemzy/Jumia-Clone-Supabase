@@ -37,18 +37,24 @@ export interface Order {
   id: string;
   buyer_id: string;
   total_price: number;
-  payment_status: 'pending' | 'paid' | 'failed';
-  order_status: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
+  status: string; // Generic status to cover payment and fulfillment
+  payment_reference?: string;
   shipping_address: string;
+  customer_email?: string;
+  items?: any[]; // JSONB data column
   created_at: string;
+  // Optional relations
+  order_items?: OrderItem[];
 }
 
 export interface OrderItem {
   id: string;
   order_id: string;
   product_id: string;
+  vendor_id?: string;
   quantity: number;
   price_at_purchase: number;
+  created_at: string;
   // Join fields supported
   product?: Product;
 }

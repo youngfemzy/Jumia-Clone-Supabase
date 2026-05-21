@@ -38,6 +38,9 @@ export const DashboardVendor: React.FC = () => {
   // Product creation states
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [formLoading, setFormLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   // Form parameters
   const [title, setTitle] = useState('');
@@ -92,15 +95,17 @@ export const DashboardVendor: React.FC = () => {
     return products.filter(p => p.vendor_id === activeVendorId);
   }, [products, activeVendorId]);
 
+  const vendorOrders = useMemo(() => {
+    return orders.filter(o => o.order_items?.some(oi => oi.vendor_id === activeVendorId));
+  }, [orders, activeVendorId]);
+
   const vendorRevenue = useMemo(() => {
-    // Sum prices of products loaded inside orders
-    // In demo / simple representation, we sum orders prices matching active vendor products catalog
-    const productIds = new Set(vendorProducts.map(vp => vp.id));
-    return orders.reduce((sum, ord) => {
-      // For demo simpleness, if orders are logged we can count average proportions
-      return sum + (ord.total_price * 0.85); // 85% goes to merchant, rest is administrative fees
+    return vendorOrders.reduce((total, ord) => {
+      const vendorItems = ord.order_items?.filter(oi => oi.vendor_id === activeVendorId) || [];
+      const orderEarnings = vendorItems.reduce((acc, item) => acc + (item.price_at_purchase * item.quantity), 0);
+      return total + orderEarnings;
     }, 0);
-  }, [orders, vendorProducts]);
+  }, [vendorOrders, activeVendorId]);
 
   // Form controls
   const handleOpenAdd = () => {
@@ -132,6 +137,7 @@ export const DashboardVendor: React.FC = () => {
       return;
     }
 
+    setFormLoading(true);
     const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
     const productData = {
       vendor_id: activeVendorId,
@@ -144,34 +150,68 @@ export const DashboardVendor: React.FC = () => {
       image_urls: imageUrl ? [imageUrl] : ['https://images.unsplash.com/photo-1531403009284-440f080d1e12?w=500&auto=format&fit=crop&q=80']
     };
 
-    if (editingId) {
-      const res = await updateProduct(editingId, productData);
-      if (res.success) {
-        toastSuccess("Product revised successfully.");
-        setShowAddForm(false);
-        setEditingId(null);
+    try {
+      if (editingId) {
+        const res = await updateProduct(editingId, productData);
+        if (res.success) {
+          toastSuccess("Product revised successfully.");
+          setShowAddForm(false);
+          setEditingId(null);
+        } else {
+          toastError(res.error || "Update rejected.");
+        }
       } else {
-        toastError(res.error || "Update rejected.");
+        const res = await addProduct(productData);
+        if (res.success) {
+          toastSuccess("New product launched directly into market!");
+          setShowAddForm(false);
+        } else {
+          toastError(res.error || "Insertion rejected.");
+        }
       }
-    } else {
-      const res = await addProduct(productData);
-      if (res.success) {
-        toastSuccess("New product launched directly into market!");
-        setShowAddForm(false);
-      } else {
-        toastError(res.error || "Insertion rejected.");
-      }
+    } catch (err: any) {
+      toastError(err.message || "An unexpected error occurred.");
+    } finally {
+      setFormLoading(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm("Are you certain you wish to remove this catalog listing permanently?")) {
+    console.log(`[DashboardVendor] handleDelete called for: ${id}. Current confirmDeleteId: ${confirmDeleteId}`);
+    
+    // Replace window.confirm with two-step state check because of sandbox restrictions
+    if (confirmDeleteId !== id) {
+      console.log(`[DashboardVendor] First click detected. Prompting for confirmation.`);
+      setConfirmDeleteId(id);
+      // Auto-reset after 4 seconds if not confirmed
+      setTimeout(() => {
+        setConfirmDeleteId(prev => {
+          if (prev === id) {
+            console.log(`[DashboardVendor] Confirmation timed out for: ${id}`);
+            return null;
+          }
+          return prev;
+        });
+      }, 4000);
+      return;
+    }
+
+    console.log(`[DashboardVendor] Second click confirmed. Executing delete.`);
+    setDeletingId(id);
+    setConfirmDeleteId(null);
+    try {
       const res = await deleteProduct(id);
+      console.log(`[DashboardVendor] Delete result:`, res);
       if (res.success) {
         toastSuccess("Item deleted successfully.");
       } else {
         toastError(res.error || "Deletion failed.");
       }
+    } catch (err: any) {
+      console.error(`[DashboardVendor] Unexpected delete error:`, err);
+      toastError(err.message || "An unexpected error occurred during deletion.");
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -232,7 +272,7 @@ export const DashboardVendor: React.FC = () => {
           <div className="space-y-1">
             <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">Total Customer Orders</span>
             <span className="text-xl sm:text-2xl font-extrabold text-gray-800 font-mono">
-              {orders.length} transactions
+              {vendorOrders.length} transactions
             </span>
           </div>
           <div className="p-3 bg-blue-50 rounded-lg text-blue-500">
@@ -351,10 +391,23 @@ export const DashboardVendor: React.FC = () => {
                           </button>
                           <button 
                             onClick={() => handleDelete(p.id)}
-                            className="p-1.5 border border-gray-250 text-gray-500 hover:text-red-500 hover:border-red-500 rounded bg-white transition cursor-pointer"
-                            title="Permanent removal"
+                            disabled={deletingId === p.id}
+                            className={`p-1.5 border rounded bg-white transition cursor-pointer flex items-center justify-center ${
+                              confirmDeleteId === p.id 
+                                ? 'bg-red-50 border-red-200 text-red-600'
+                                : deletingId === p.id 
+                                  ? 'text-gray-300 border-gray-100 cursor-not-allowed' 
+                                  : 'border-gray-250 text-gray-500 hover:text-red-500 hover:border-red-500'
+                            }`}
+                            title={confirmDeleteId === p.id ? "Click again to confirm" : "Permanent removal"}
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            {deletingId === p.id ? (
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            ) : confirmDeleteId === p.id ? (
+                              <span className="text-[10px] font-bold px-1">CONFIRM?</span>
+                            ) : (
+                              <Trash2 className="w-3.5 h-3.5" />
+                            )}
                           </button>
                         </div>
                       </td>
@@ -398,50 +451,67 @@ export const DashboardVendor: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 font-semibold text-gray-700">
-                {orders.length > 0 ? (
-                  orders.map((o) => (
-                    <tr key={o.id} className="hover:bg-gray-50/50">
-                      <td className="p-4 font-mono font-bold text-gray-900 uppercase">
-                        {o.id}
-                      </td>
-                      <td className="p-4">
-                        <p className="line-clamp-2 max-w-xs">{o.shipping_address}</p>
-                        <p className="text-[10px] text-gray-400 font-medium font-mono mt-1">DATE: {new Date(o.created_at).toLocaleString()}</p>
-                      </td>
-                      <td className="p-4 font-mono font-bold text-orange-600 text-sm">
-                        ${o.total_price.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </td>
-                      <td className="p-4 uppercase text-[10px]">
-                        <span className={`px-2 py-0.5 rounded font-bold ${
-                          o.payment_status === 'paid' ? 'bg-emerald-50 text-emerald-800 border border-emerald-100' : 'bg-amber-50 text-amber-800'
-                        }`}>
-                          {o.payment_status}
-                        </span>
-                      </td>
-                      <td className="p-4 uppercase text-[10px]">
-                        <span className={`px-2 py-0.5 rounded font-bold ${
-                          o.order_status === 'delivered' ? 'bg-emerald-50 text-emerald-800' :
-                          o.order_status === 'shipped' ? 'bg-blue-50 text-blue-800' :
-                          o.order_status === 'processing' ? 'bg-indigo-50 text-indigo-800' : 'bg-gray-100 text-gray-500'
-                        }`}>
-                          {o.order_status}
-                        </span>
-                      </td>
-                      <td className="p-4 text-right">
-                        <select
-                          value={o.order_status}
-                          onChange={(e) => updateOrderStatus(o.id, e.target.value as any)}
-                          className="bg-gray-50 border border-gray-200 py-1 px-2.5 text-[11px] font-bold rounded cursor-pointer text-gray-700 focus:outline-none focus:border-orange-500"
-                        >
-                          <option value="pending">Pending</option>
-                          <option value="processing">Processing</option>
-                          <option value="shipped">Shipped</option>
-                          <option value="delivered">Delivered</option>
-                          <option value="cancelled">Cancelled</option>
-                        </select>
-                      </td>
-                    </tr>
-                  ))
+                {vendorOrders.length > 0 ? (
+                  vendorOrders.map((o) => {
+                    const vendorItems = o.order_items?.filter(oi => oi.vendor_id === activeVendorId) || [];
+                    const vendorSubtotal = vendorItems.reduce((acc, item) => acc + (item.price_at_purchase * item.quantity), 0);
+                    
+                    return (
+                      <tr key={o.id} className="hover:bg-gray-50/50">
+                        <td className="p-4">
+                          <p className="font-mono font-bold text-gray-900 uppercase text-[10px]">{o.id.slice(0, 8)}...</p>
+                          <div className="mt-2 space-y-1">
+                            {vendorItems.map((item, idx) => (
+                              <div key={idx} className="flex items-center space-x-2 text-[9px] text-gray-500">
+                                <span className="bg-gray-100 px-1 rounded font-bold text-gray-600">{item.quantity}x</span>
+                                <span className="truncate max-w-[100px]">{item.product?.title || 'Unknown Product'}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="p-4">
+                          <p className="line-clamp-2 max-w-xs">{o.shipping_address}</p>
+                          <p className="text-[10px] text-gray-400 font-medium font-mono mt-1">DATE: {new Date(o.created_at).toLocaleString()}</p>
+                        </td>
+                        <td className="p-4 font-mono font-bold text-emerald-600 text-sm">
+                          ${vendorSubtotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="p-4 uppercase text-[10px]">
+                          <span className={`px-2 py-0.5 rounded font-bold ${
+                            o.status === 'paid' || o.status === 'delivered' || o.status === 'shipped' 
+                              ? 'bg-emerald-50 text-emerald-800 border border-emerald-100' 
+                              : 'bg-amber-50 text-amber-800'
+                          }`}>
+                            {o.payment_reference ? 'CARD PAID' : 'PENDING COD'}
+                          </span>
+                        </td>
+                        <td className="p-4 uppercase text-[10px]">
+                          <span className={`px-2 py-0.5 rounded font-bold ${
+                            o.status === 'delivered' ? 'bg-emerald-50 text-emerald-800' :
+                            o.status === 'shipped' ? 'bg-blue-50 text-blue-800' :
+                            o.status === 'processing' ? 'bg-indigo-50 text-indigo-800' : 
+                            o.status === 'paid' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-gray-100 text-gray-500'
+                          }`}>
+                            {o.status === 'paid' ? 'NEW (PAID)' : o.status}
+                          </span>
+                        </td>
+                        <td className="p-4 text-right">
+                          <select
+                            value={o.status || 'pending'}
+                            onChange={(e) => updateOrderStatus(o.id, e.target.value as any)}
+                            className="bg-gray-50 border border-gray-200 py-1 px-2.5 text-[11px] font-bold rounded cursor-pointer text-gray-700 focus:outline-none focus:border-orange-500"
+                          >
+                            <option value="pending">Pending</option>
+                            <option value="paid">Initialize / Paid</option>
+                            <option value="processing">In Progress / Packing</option>
+                            <option value="shipped">Dispatch / Shipped</option>
+                            <option value="delivered">Completed / Delivered</option>
+                            <option value="cancelled">Cancelled</option>
+                          </select>
+                        </td>
+                      </tr>
+                    );
+                  })
                 ) : (
                   <tr>
                     <td colSpan={6} className="p-12 text-center text-gray-400 font-semibold text-xs">
@@ -626,11 +696,17 @@ export const DashboardVendor: React.FC = () => {
                 >
                   Cancel Action
                 </button>
-                <button
+                 <button
                   type="submit"
-                  className="w-full py-2 bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs uppercase rounded transition cursor-pointer shadow-sm"
+                  disabled={formLoading}
+                  className={`w-full py-2 font-bold text-xs uppercase rounded transition shadow-sm flex items-center justify-center space-x-2 ${
+                    formLoading 
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                      : 'bg-orange-500 hover:bg-orange-600 text-white cursor-pointer'
+                  }`}
                 >
-                  {editingId ? 'Modify Inventory details' : 'Deploy Product Online'}
+                  {formLoading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                  <span>{editingId ? 'Modify Inventory details' : 'Deploy Product Online'}</span>
                 </button>
               </div>
             </form>

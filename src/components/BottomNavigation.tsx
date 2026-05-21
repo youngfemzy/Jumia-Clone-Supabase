@@ -5,7 +5,8 @@ import {
   Grid, 
   ShoppingCart, 
   Store, 
-  ShieldCheck 
+  ShieldCheck,
+  Package
 } from 'lucide-react';
 
 interface BottomNavigationProps {
@@ -83,13 +84,13 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({ onNavigate, 
         </button>
       ) : (
         <button 
-          onClick={() => onNavigate('auth')}
+          onClick={() => onNavigate(currentUser ? 'buyer-dashboard' : 'auth')}
           className={`flex flex-col items-center select-none active:scale-90 transition ${
-            activeView === 'auth' ? 'text-orange-500' : 'text-gray-400 hover:text-gray-600'
+            activeView === 'auth' || activeView === 'buyer-dashboard' ? 'text-orange-500' : 'text-gray-400 hover:text-gray-600'
           }`}
         >
-          <Store className="w-5 h-5" />
-          <span className="text-[9px] font-bold mt-0.5">Sell Products</span>
+          {currentUser ? <Package className="w-5 h-5" /> : <Store className="w-5 h-5" />}
+          <span className="text-[9px] font-bold mt-0.5">{currentUser ? 'My Orders' : 'Sell Products'}</span>
         </button>
       )}
 

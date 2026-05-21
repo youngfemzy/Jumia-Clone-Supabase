@@ -307,27 +307,25 @@ export const DashboardAdmin: React.FC = () => {
                       </td>
                       <td className="p-4 uppercase text-[10px]">
                         <select
-                          value={o.order_status}
+                          value={o.status || 'pending'}
                           onChange={(e) => updateOrderStatus(o.id, e.target.value as any)}
                           className="bg-gray-50 border border-gray-200 py-1 px-2 text-[10px] font-bold rounded cursor-pointer text-gray-700 outline-none"
                         >
                           <option value="pending">Pending</option>
-                          <option value="processing">Processing</option>
+                          <option value="paid">Paid</option>
                           <option value="shipped">Shipped</option>
                           <option value="delivered">Delivered</option>
                           <option value="cancelled">Cancelled</option>
                         </select>
                       </td>
-                      <td className="p-4 text-right uppercase text-[10px]">
-                        <select
-                          value={o.payment_status}
-                          onChange={(e) => updatePaymentStatus(o.id, e.target.value as any)}
-                          className="bg-gray-50 border border-gray-200 py-1 px-2 text-[10px] font-bold rounded cursor-pointer text-gray-700 outline-none"
-                        >
-                          <option value="pending">Escrow Custody (Pending)</option>
-                          <option value="paid">Disbursed to Merchant (Paid)</option>
-                          <option value="failed">Refunded (Failed)</option>
-                        </select>
+                      <td className="p-4 text-right">
+                        <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
+                          o.status === 'paid' || o.status === 'delivered' || o.status === 'shipped' 
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' 
+                            : 'bg-amber-50 text-amber-700 border border-amber-100'
+                        }`}>
+                          {o.payment_reference ? 'CARD (ONLINE)' : 'COD (OFFLINE)'}
+                        </span>
                       </td>
                     </tr>
                   ))

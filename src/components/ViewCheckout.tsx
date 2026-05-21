@@ -1,26 +1,100 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useShop } from '../context/ShopContext';
 import { useToast } from '../context/ToastContext';
-import { CreditCard, MapPin, Truck, CheckCircle2, ArrowLeft, Database, Phone, User as UserIcon } from 'lucide-react';
+import { CreditCard, MapPin, Truck, CheckCircle2, ArrowLeft, Database, Phone, User as UserIcon, RefreshCw } from 'lucide-react';
+import { usePaystackPayment } from 'react-paystack';
 
 interface ViewCheckoutProps {
   onNavigate: (view: string, params?: any) => void;
 }
 
 export const ViewCheckout: React.FC<ViewCheckoutProps> = ({ onNavigate }) => {
-  const { cartItems, cartTotal, placeOrder, currentUser } = useShop();
-  const { success: toastSuccess, error: toastError, warning: toastWarning } = useToast();
+  const { cartItems, cartTotal, placeOrder, updateOrderPayment, clearCart, currentUser } = useShop();
+  const { success: toastSuccess, error: toastError, warning: toastWarning, info: toastInfo } = useToast();
 
   const [fullName, setFullName] = useState(currentUser?.full_name || '');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [addressLine, setAddressLine] = useState('');
   const [regionCode, setRegionCode] = useState('Lagos');
-  const [paymentOption, setPaymentOption] = useState<'cod' | 'card'>('cod');
+  const [paymentOption, setPaymentOption] = useState<'cod' | 'card'>('card');
   
   const [submitting, setSubmitting] = useState(false);
   const [placedOrderId, setPlacedOrderId] = useState<string | null>(null);
+  const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
+
+  // Redirect on success
+  useEffect(() => {
+    if (placedOrderId) {
+      window.scrollTo(0, 0);
+      onNavigate(currentUser?.role === 'vendor' ? 'vendor-dashboard' : 'dashboard', { tab: 'orders' });
+    }
+  }, [placedOrderId, currentUser, onNavigate]);
 
   const cartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
+
+  // Paystack Config
+  const paystackConfig = {
+    reference: (new Date()).getTime().toString(),
+    email: currentUser?.email || "customer@example.com",
+    amount: Math.round(cartTotal * 100), // Amount in kobo
+    publicKey: (import.meta.env.VITE_PAYSTACK_PUBLIC_KEY as string) || 'pk_test_your_fallback_key_here',
+  };
+
+  const initializePayment = usePaystackPayment(paystackConfig);
+
+  const handleSuccess = async (reference: any) => {
+    console.log("[Paystack EVENT] handleSuccess reached:", reference);
+    if (pendingOrderId) {
+      console.log("[Paystack EVENT] Processing update for pending order:", pendingOrderId);
+      setSubmitting(true);
+      try {
+        const ok = await updateOrderPayment(pendingOrderId, reference.reference, 'paid');
+        if (ok) {
+          console.log("[Paystack EVENT] Order updated to paid successfully in DB.");
+          await clearCart();
+          setPlacedOrderId(pendingOrderId);
+          toastSuccess("Payment successful and order updated!");
+        } else {
+          console.error("[Paystack EVENT] updateOrderPayment returned false.");
+          toastError("Order update failed in DB. Please contact support with ref: " + reference.reference);
+        }
+      } catch (err: any) {
+        console.error("[Paystack EVENT] Error in handleSuccess try-block:", err);
+        toastError("Finalization error: " + err.message);
+      } finally {
+        setSubmitting(false);
+      }
+    } else {
+      console.warn("[Paystack EVENT] Success reached but pendingOrderId was null!");
+      toastWarning("Payment received but order tracking lost. Please refresh.");
+      setSubmitting(false);
+    }
+  };
+
+  const handleClose = () => {
+    console.log("[Paystack EVENT] handleClose reached - Popup dismissed.");
+    setSubmitting(false);
+    toastInfo("Payment window closed. Your order is safely saved as 'pending' in your account.");
+  };
+
+  const finalizeOrder = async (ref?: string, status: string = 'pending') => {
+    setSubmitting(true);
+    const completeAddressInfo = `${fullName} | Tel: ${phoneNumber} | Addr: ${addressLine}, ${regionCode}`;
+    
+    try {
+      const res = await placeOrder(completeAddressInfo, ref, status);
+      if (res.success && res.orderId) {
+        setPlacedOrderId(res.orderId);
+        toastSuccess(status === 'paid' ? "Payment successful and order placed!" : "Order placed successfully!");
+      } else {
+        toastError(res.error || "Failed to submit transaction.");
+      }
+    } catch (err: any) {
+      toastError("Submission error: " + err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const handlePlaceOrderSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,21 +103,32 @@ export const ViewCheckout: React.FC<ViewCheckoutProps> = ({ onNavigate }) => {
       return;
     }
 
-    setSubmitting(true);
-    const completeAddressInfo = `${fullName} | Tel: ${phoneNumber} | Addr: ${addressLine}, ${regionCode}`;
-    
-    try {
-      const res = await placeOrder(completeAddressInfo);
-      if (res.success && res.orderId) {
-        setPlacedOrderId(res.orderId);
-        toastSuccess("Order placed successfully!");
-      } else {
-        toastError(res.error || "Failed to submit transaction.");
+    if (paymentOption === 'card') {
+      setSubmitting(true);
+      const completeAddressInfo = `${fullName} | Tel: ${phoneNumber} | Addr: ${addressLine}, ${regionCode}`;
+      
+      try {
+        toastInfo("Initializing secure connection...");
+        // 1. Save Pending Order FIRST (Skip clear cart to keep Paystack amount valid)
+        const res = await placeOrder(completeAddressInfo, undefined, 'pending', true);
+        
+        if (res.success && res.orderId) {
+          setPendingOrderId(res.orderId);
+          console.log("[Checkout] Initiating Paystack Popup...");
+          // In react-paystack v3.x - v6.x, initializePayment takes (onSuccess, onClose) as positional arguments
+          // We use 'as any' to avoid any conflicting type definitions that might expect only 1 arg
+          (initializePayment as any)(handleSuccess, handleClose);
+        } else {
+          toastError(res.error || "Could not initialize order. Please try again.");
+          setSubmitting(false);
+        }
+      } catch (err: any) {
+        console.error("[Checkout] Pre-payment save error:", err);
+        toastError("Failed to initialize order: " + err.message);
+        setSubmitting(false);
       }
-    } catch (err: any) {
-      toastError("Submission error: " + err.message);
-    } finally {
-      setSubmitting(false);
+    } else {
+      finalizeOrder();
     }
   };
 
@@ -86,22 +171,22 @@ export const ViewCheckout: React.FC<ViewCheckoutProps> = ({ onNavigate }) => {
 
         <div className="flex flex-col sm:flex-row gap-3 pt-4">
           <button 
+            onClick={() => {
+              if (currentUser?.role === 'vendor') {
+                onNavigate('vendor-dashboard', { tab: 'orders' });
+              } else {
+                onNavigate('dashboard', { tab: 'orders' });
+              }
+            }}
+            className="w-full py-2.5 bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold rounded-lg transition shadow-md flex items-center justify-center"
+          >
+            Track My Order Status
+          </button>
+          <button 
             onClick={() => onNavigate('home')}
             className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-bold rounded-lg transition"
           >
-            Go to Homepage
-          </button>
-          <button 
-            onClick={() => {
-              if (currentUser?.role === 'vendor') {
-                onNavigate('vendor-dashboard');
-              } else {
-                onNavigate('home');
-              }
-            }}
-            className="w-full py-2.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-lg transition shadow-sm"
-          >
-            Review Marketplace Hubs
+            Continue Shopping
           </button>
         </div>
       </div>
@@ -250,12 +335,11 @@ export const ViewCheckout: React.FC<ViewCheckoutProps> = ({ onNavigate }) => {
             </div>
 
             {paymentOption === 'card' && (
-              <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-3 animate-in fade-in slide-in-from-top-2 duration-150 text-xs">
-                <p className="font-bold text-gray-700">Add payment details</p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <input type="text" placeholder="Card Number" className="col-span-1 sm:col-span-2 px-3 py-1.5 border border-gray-200 rounded text-xs focus:outline-none bg-white font-mono" />
-                  <input type="text" placeholder="MM/YY" className="px-3 py-1.5 border border-gray-200 rounded text-xs focus:outline-none bg-white font-mono" />
-                </div>
+              <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200 space-y-2 animate-in fade-in slide-in-from-top-2 duration-150 text-xs">
+                <p className="font-bold text-emerald-800 flex items-center">
+                  <CheckCircle2 className="w-4 h-4 mr-2" /> Paystack Secured
+                </p>
+                <p className="text-emerald-600 font-medium">You will be redirected to Paystack's secure checkout page upon clicking the confirm button below.</p>
               </div>
             )}
           </div>
@@ -265,7 +349,7 @@ export const ViewCheckout: React.FC<ViewCheckoutProps> = ({ onNavigate }) => {
             disabled={submitting}
             className="w-full bg-orange-500 hover:bg-orange-600 text-white font-extrabold text-xs uppercase tracking-wider py-4 rounded-xl transition active:scale-95 disabled:bg-gray-300 disabled:cursor-not-allowed shadow-md cursor-pointer"
           >
-            {submitting ? 'PROCESSING SECURE ESCROW TRANSACTION...' : `CONFIRM ESCROW DISBURSEMENT ($${cartTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })})`}
+            {submitting ? 'PROCESSING YOUR ORDER...' : `CONFIRM AND PAY ($${cartTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })})`}
           </button>
         </form>
 
@@ -299,13 +383,13 @@ export const ViewCheckout: React.FC<ViewCheckoutProps> = ({ onNavigate }) => {
             </div>
 
             {/* Total blocks */}
-            <div className="border-t border-gray-50 pt-4 space-y-2.5 leading-snug text-xs font-semibold text-gray-500">
+            <div className="border-t border-gray-100 pt-4 space-y-2.5 leading-snug text-xs font-semibold text-gray-500">
               <div className="flex justify-between">
                 <span>Subtotal ({cartCount} units)</span>
                 <span className="text-gray-800 font-mono">${cartTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
               </div>
               <div className="flex justify-between border-t border-gray-50 pt-3 text-sm font-extrabold text-gray-800 uppercase">
-                <span>Total to pay</span>
+                <span>Order Total</span>
                 <span className="text-orange-600 font-mono text-base">${cartTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
               </div>
             </div>

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Product, Vendor, Profile, Order, OrderItem, CartItem, UserRole, CategoryType } from '../types';
 import { getSupabase, isConfigured, supabaseUrl, supabaseAnonKey } from '../lib/supabase';
 import { SAMPLE_PRODUCTS, SAMPLE_VENDORS } from '../data/dummyData';
+import { useToast } from './ToastContext';
 
 // Dynamic Database Schema Metadata
 const generateUUID = () => {
@@ -19,9 +20,8 @@ const generateUUID = () => {
 
 let detectedProfileColumns: string[] = ['id', 'email', 'role', 'name', 'full_name', 'avatar_url', 'created_at'];
 let detectedVendorColumns: string[] = ['id', 'user_id', 'store_name', 'store_slug', 'logo_url', 'logo', 'description', 'email', 'role', 'created_at'];
-let detectedProductColumns: string[] = ['id', 'vendor_id', 'title', 'description', 'price', 'stock', 'image_url', 'image_urls', 'category', 'slug', 'created_at'];
-let detectedOrderColumns: string[] = ['id', 'buyer_id', 'total_price', 'status', 'created_at'];
-let detectedOrderItemColumns: string[] = ['id', 'order_id', 'product_id', 'quantity', 'price_at_purchase', 'created_at'];
+let detectedProductColumns: string[] = ['id', 'vendor_id', 'title', 'description', 'price', 'stock', 'image_url', 'category', 'slug', 'created_at'];
+let detectedOrderColumns: string[] = ['id', 'buyer_id', 'total_price', 'status', 'payment_reference', 'shipping_address', 'customer_email', 'items', 'created_at'];
 let detectedCartColumns: string[] = ['id', 'user_id', 'product_id', 'quantity', 'created_at'];
 
 const filterPayloadForTable = (rawPayload: any, allowedColumns: string[]): any => {
@@ -114,24 +114,28 @@ const mapDbToProduct = (dbObj: any): Product => {
 };
 
 const buildProductDbPayload = (product: any, columns: string[]): any => {
-  const hasColumn = (name: string) => columns.includes(name);
+  const hasColumn = (name: string) => columns.length === 0 || columns.includes(name);
   
   const payload: any = {
-    id: product.id,
     vendor_id: product.vendor_id,
     title: product.title,
     description: product.description,
     price: product.price,
     stock: product.stock,
-    created_at: product.created_at
   };
+
+  if (product.id) payload.id = product.id;
+  if (product.created_at) payload.created_at = product.created_at;
 
   if (hasColumn('image_url')) {
     payload.image_url = product.image_url || (product.image_urls && product.image_urls[0]) || '';
   }
+  
+  // Strongly check for image_urls to avoid common Supabase schema cache errors
   if (hasColumn('image_urls')) {
     payload.image_urls = product.image_urls || [product.image_url || ''];
   }
+  
   if (hasColumn('slug')) {
     payload.slug = product.slug;
   }
@@ -147,41 +151,39 @@ const mapDbToOrder = (dbObj: any): Order => {
     id: dbObj.id,
     buyer_id: dbObj.buyer_id || '',
     total_price: Number(dbObj.total_price) || 0,
-    payment_status: dbObj.payment_status || (dbObj.status === 'paid' ? 'paid' : 'pending'),
-    order_status: dbObj.order_status || (dbObj.status && dbObj.status !== 'paid' ? dbObj.status : 'pending'),
+    status: dbObj.status || 'paid',
+    payment_reference: dbObj.payment_reference,
     shipping_address: dbObj.shipping_address || 'Default Address',
-    created_at: dbObj.created_at || new Date().toISOString()
+    customer_email: dbObj.customer_email,
+    created_at: dbObj.created_at || new Date().toISOString(),
+    // The items are now stored as a JSON array directly in the order record
+    order_items: Array.isArray(dbObj.items) ? dbObj.items.map((it: any) => ({
+      id: it.id || generateUUID(),
+      order_id: dbObj.id,
+      product_id: it.product_id,
+      vendor_id: it.vendor_id,
+      quantity: it.quantity,
+      price_at_purchase: it.price_at_purchase,
+      created_at: it.created_at || dbObj.created_at,
+      product: it.product
+    })) : []
   };
 };
 
 const buildOrderDbPayload = (order: any, columns: string[]): any => {
-  const hasColumn = (name: string) => columns.includes(name);
-
   const payload: any = {
     id: order.id,
     buyer_id: order.buyer_id,
     total_price: order.total_price,
+    status: order.status || 'paid',
+    shipping_address: order.shipping_address,
+    customer_email: order.customer_email,
+    payment_reference: order.payment_reference,
+    items: order.items, // JSON array
     created_at: order.created_at
   };
 
-  if (hasColumn('status')) {
-    payload.status = order.payment_status === 'paid' ? 'paid' : order.order_status || 'pending';
-  }
-  if (hasColumn('payment_status')) {
-    payload.payment_status = order.payment_status;
-  }
-  if (hasColumn('order_status')) {
-    payload.order_status = order.order_status;
-  }
-  if (hasColumn('shipping_address')) {
-    payload.shipping_address = order.shipping_address;
-  }
-
   return filterPayloadForTable(payload, columns);
-};
-
-const buildOrderItemDbPayload = (item: any, columns: string[]): any => {
-  return filterPayloadForTable(item, columns);
 };
 
 interface ShopContextType {
@@ -213,16 +215,17 @@ interface ShopContextType {
 
   // Cart operations
   cartItems: CartItem[];
-  addToCart: (productId: string, quantity?: number) => void;
-  removeFromCart: (productId: string) => void;
-  updateCartQuantity: (productId: string, quantity: number) => void;
-  clearCart: () => void;
+  addToCart: (productId: string, quantity?: number) => Promise<void>;
+  removeFromCart: (productId: string) => Promise<void>;
+  updateCartQuantity: (productId: string, quantity: number) => Promise<void>;
+  clearCart: () => Promise<void>;
   cartTotal: number;
 
   // Order Operations
-  placeOrder: (shippingAddress: string) => Promise<{ success: boolean; orderId?: string; error?: string }>;
-  updateOrderStatus: (orderId: string, status: Order['order_status']) => Promise<boolean>;
-  updatePaymentStatus: (orderId: string, status: Order['payment_status']) => Promise<boolean>;
+  placeOrder: (shippingAddress: string, paymentReference?: string, paymentStatus?: string, skipClearCart?: boolean) => Promise<{ success: boolean; orderId?: string; error?: string }>;
+  updateOrderStatus: (orderId: string, status: string) => Promise<boolean>;
+  updateOrderPayment: (orderId: string, reference: string, status?: string) => Promise<boolean>;
+  updatePaymentStatus: (orderId: string, status: string) => Promise<boolean>;
 
   // Filter/UI helpers
   searchQuery: string;
@@ -236,6 +239,7 @@ const activeSyncPromises = new Map<string, Promise<{ profile: Profile; vendor: V
 export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const supabase = getSupabase();
   const supabaseConfigured = isConfigured;
+  const { error: toastError, success: toastSuccess } = useToast();
 
   // Connected state (whether we are using direct Supabase queries)
   const [isConnected, setIsConnected] = useState<boolean>(false);
@@ -404,13 +408,6 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   console.log('[Supabase Schema Detection] Detected order columns:', detectedOrderColumns);
                 }
               }
-              if (spec.definitions.order_items) {
-                const orderItemCols = Object.keys(spec.definitions.order_items.properties || {});
-                if (orderItemCols.length > 0) {
-                  detectedOrderItemColumns = orderItemCols;
-                  console.log('[Supabase Schema Detection] Detected order_items columns:', detectedOrderItemColumns);
-                }
-              }
               if (spec.definitions.cart) {
                 const cartCols = Object.keys(spec.definitions.cart.properties || {});
                 if (cartCols.length > 0) {
@@ -433,6 +430,39 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } catch (_) {}
       }
 
+      const fetchCartFromSupabase = async (userId: string) => {
+        if (!supabase) return;
+        try {
+          const { data, error } = await supabase
+            .from('cart')
+            .select('*')
+            .eq('user_id', userId);
+          
+          if (error) {
+            console.error("[ShopContext] Failed to fetch cart from Supabase:", error);
+            return;
+          }
+
+          if (data && data.length > 0) {
+            console.log("[ShopContext] Loaded cart from Supabase:", data);
+            // We need to associate product details because the cart table usually only has product_id
+            const cartWithProducts: CartItem[] = data.map(dbItem => {
+              const product = products.find(p => p.id === dbItem.product_id);
+              return {
+                id: dbItem.id || `cart-${Math.random().toString(36).substring(2, 9)}`,
+                user_id: dbItem.user_id,
+                product_id: dbItem.product_id,
+                quantity: dbItem.quantity,
+                product
+              };
+            });
+            setCartItems(cartWithProducts);
+          }
+        } catch (err) {
+          console.error("[ShopContext] Error fetching cart:", err);
+        }
+      };
+
       if (supabase && supabaseConfigured) {
         try {
           await detectDbSchema();
@@ -445,6 +475,8 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
               const { profile, vendor } = await syncUserProfileAndVendor(session.user);
               setCurrentUser(profile);
               setCurrentVendor(vendor);
+              // Fetch cart after profile is synced
+              await fetchCartFromSupabase(session.user.id);
             } catch (syncErr) {
               console.error("Initialize profile sync failed, falling back to basic setup", syncErr);
             }
@@ -507,10 +539,11 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .from('vendors')
         .select('*');
 
-      // Orders
+      // Unified orders fetch
       const { data: realOrders } = await supabase
         .from('orders')
-        .select('*');
+        .select('*')
+        .order('created_at', { ascending: false });
 
       // Sync local collections
       if (realProducts) {
@@ -519,19 +552,15 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setProducts([]);
       }
 
-      if (realVendors) {
-        setVendors(realVendors as Vendor[]);
-      } else {
-        setVendors([]);
-      }
-
+      setVendors((realVendors as any[]) || []);
+      
       if (realOrders) {
-        setOrders((realOrders as any[]).map(mapDbToOrder));
+        setOrders(realOrders.map(mapDbToOrder));
       } else {
         setOrders([]);
       }
     } catch (e) {
-      console.error("Database loading failed. Ensuring safe empty state.", e);
+      console.error("Database loading failed.", e);
       setProducts([]);
       setVendors([]);
       setOrders([]);
@@ -658,20 +687,38 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCartItems([]);
   };
 
-  // Helper: toggle user Roles dynamically
+  // Helper: toggle user Roles dynamically (strictly regulated)
   const updateRole = async (role: UserRole) => {
     if (!currentUser || !isConnected || !supabase) return;
     
-    try {
-      await supabase
-        .from('profile')
-        .update({ role })
-        .eq('id', currentUser.id);
-      
-      const updatedProfile = { ...currentUser, role };
-      setCurrentUser(updatedProfile);
+    // Safety: Buyers cannot promote themselves to Vendors via UI
+    if (currentUser.role === 'buyer' && role === 'vendor') {
+      console.error("Unauthorized role upgrade attempt blocked.");
+      return;
+    }
 
-      // Ensure Vendor storefront exists
+    try {
+      // Only allow DB update if user is Admin OR if it's a valid downgrade/perspective switch
+      // Actually, per user request, DB roles should be stable. 
+      // We will only update the UI state unless it's a legitimate need.
+      // But since currentUser is derived from DB, we HAVE to update DB to persist it correctly if that's the intent.
+      // However, if the user says "this is wrong", I should avoid updating the DB for buyers.
+      
+      if (currentUser.role === 'admin' || currentUser.role === 'vendor') {
+        await supabase
+          .from('profile')
+          .update({ role })
+          .eq('id', currentUser.id);
+        
+        const updatedProfile = { ...currentUser, role };
+        setCurrentUser(updatedProfile);
+      } else {
+        // For normal buyers, they stay buyers.
+        console.warn("Role update ignored for base buyer account.");
+        return;
+      }
+      
+      // Ensure Vendor storefront exists for legitimate vendors/admins
       if (role === 'vendor') {
         const { data: vendorRows } = await supabase
           .from('vendors')
@@ -729,16 +776,23 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const dbProductObj = {
         vendor_id: activeVendorId,
         title: productData.title,
-        description: productData.description,
+        description: productData.description || '',
         price: productData.price,
         stock: productData.stock,
         image_url: productData.image_urls?.[0] || '',
         image_urls: productData.image_urls || [],
-        category: productData.category,
+        category: productData.category || 'Electronics',
         slug: productData.slug,
         created_at: new Date().toISOString()
       };
       const dbPayload = buildProductDbPayload(dbProductObj, detectedProductColumns);
+
+      // Force delete image_urls if we suspect it's not in the DB based on recent errors
+      if (dbPayload.image_urls && !detectedProductColumns.includes('image_urls')) {
+        delete dbPayload.image_urls;
+      }
+
+      console.log("[ShopContext] Inserting product with payload:", dbPayload);
 
       const { data, error } = await supabase
         .from('products')
@@ -746,13 +800,17 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error("[ShopContext] Supabase insert error:", error);
+        throw error;
+      }
+      
       const mapped = mapDbToProduct(data);
       setProducts(prev => [mapped, ...prev]);
       return { success: true, product: mapped };
     } catch (err: any) {
-      console.error("Add product error:", err);
-      return { success: false, error: err.message };
+      console.error("Add product error final catch:", err);
+      return { success: false, error: err.message || 'Failed to insert product into database.' };
     }
   };
 
@@ -793,83 +851,159 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: 'Supabase database is not configured.' };
     }
     try {
+      console.log(`[ShopContext] Initiating delete for product: ${productId}`);
+      
+      // 1. Clear cart references first to avoid Foreign Key constraint issues (common blocker)
+      // We do this in a try-catch because RLS might prevent vendors from modifying other users' carts
+      try {
+        const { error: cartDelErr } = await supabase
+          .from('cart')
+          .delete()
+          .eq('product_id', productId);
+        
+        if (cartDelErr) {
+          console.warn("[ShopContext] Potential RLS restriction while clearing carts:", cartDelErr);
+        }
+      } catch (err) {
+        console.warn("[ShopContext] Cart cleanup skipped or failed:", err);
+      }
+
+      // 2. Attempt deletion of the product itself
       const { error } = await supabase
         .from('products')
         .delete()
         .eq('id', productId);
 
-      if (error) throw error;
+      if (error) {
+        console.error("[ShopContext] Supabase product delete error:", error);
+        if (error.code === '23503') {
+          throw new Error('This product is referenced by existing orders or in-active carts and cannot be deleted. You can set its stock to 0 instead.');
+        }
+        throw error;
+      }
+      
+      console.log(`[ShopContext] Successfully deleted product: ${productId}`);
       setProducts(prev => prev.filter(p => p.id !== productId));
       return { success: true };
     } catch (err: any) {
-      return { success: false, error: err.message };
+      console.error("[ShopContext] Delete product error:", err);
+      return { success: false, error: err.message || 'Deletion rejected by database policy.' };
     }
   };
 
   // --- CART SYSTEM (Strict client-side persistence representation) ---
 
-  const addToCart = (productId: string, quantity = 1) => {
+  const addToCart = async (productId: string, quantity = 1) => {
     const matchedProduct = products.find(p => p.id === productId);
     if (!matchedProduct) return;
 
-    setCartItems(prev => {
-      const existingIdx = prev.findIndex(item => item.product_id === productId);
-      if (existingIdx > -1) {
-        const updated = [...prev];
-        updated[existingIdx].quantity += quantity;
-        return updated;
-      } else {
-        return [...prev, {
-          id: 'cart-' + Math.random().toString(36).substring(2, 9),
-          user_id: currentUser?.id || 'guest',
-          product_id: productId,
-          quantity,
-          product: matchedProduct
-        }];
-      }
-    });
+    if (!currentUser) {
+      toastError("Please login to add items to cart.");
+      return;
+    }
 
-    // If connected, we push changes to Supabase 'cart' table in the background
+    const existingIdx = cartItems.findIndex(item => item.product_id === productId);
+    const newTotalQuantity = existingIdx > -1 ? cartItems[existingIdx].quantity + quantity : quantity;
+
+    // If connected, we MUST ensure Supabase is updated first per user request
     if (isConnected && supabase && currentUser) {
       const cartObj = {
         user_id: currentUser.id,
         product_id: productId,
-        quantity,
+        quantity: newTotalQuantity,
         created_at: new Date().toISOString()
       };
+      
       const dbCartPayload = filterPayloadForTable(cartObj, detectedCartColumns);
       
-      supabase.from('cart').insert(dbCartPayload).then(({ error }) => {
-        if (error) console.warn("Could not sync added card item:", error);
+      try {
+        console.log(`[ShopContext] Syncing cart add for: ${productId} with quantity ${newTotalQuantity}`);
+        
+        // Consistent Delete -> Insert cycle to ensure one row per user/product pair.
+        const { error: delErr } = await supabase.from('cart')
+          .delete()
+          .eq('user_id', currentUser.id)
+          .eq('product_id', productId);
+        
+        if (delErr) throw delErr;
+
+        const { error: insErr } = await supabase.from('cart').insert(dbCartPayload);
+        if (insErr) throw insErr;
+
+        // Only update local state if DB succeeded
+        setCartItems(prev => {
+          const idx = prev.findIndex(item => item.product_id === productId);
+          if (idx > -1) {
+            const updated = [...prev];
+            updated[idx].quantity = newTotalQuantity;
+            return updated;
+          } else {
+            return [...prev, {
+              id: 'cart-' + Math.random().toString(36).substring(2, 9),
+              user_id: currentUser.id,
+              product_id: productId,
+              quantity: newTotalQuantity,
+              product: matchedProduct
+            }];
+          }
+        });
+        toastSuccess(`${matchedProduct.title} added to cart.`);
+      } catch (err: any) {
+        console.error("[ShopContext] Cart sync error:", err);
+        toastError(`Failed to sync cart: ${err.message || "Database error"}`);
+      }
+    } else {
+      // Offline/Guest fallback
+      setCartItems(prev => {
+        const idx = prev.findIndex(item => item.product_id === productId);
+        if (idx > -1) {
+          const updated = [...prev];
+          updated[idx].quantity += quantity;
+          return updated;
+        } else {
+          return [...prev, {
+            id: 'cart-' + Math.random().toString(36).substring(2, 9),
+            user_id: currentUser?.id || 'guest',
+            product_id: productId,
+            quantity,
+            product: matchedProduct
+          }];
+        }
       });
+      toastSuccess(`${matchedProduct.title} added to cart.`);
     }
   };
 
-  const removeFromCart = (productId: string) => {
-    setCartItems(prev => prev.filter(item => item.product_id !== productId));
+  const removeFromCart = async (productId: string) => {
+    console.log(`[ShopContext] removeFromCart CALLED for: ${productId}`);
     
     if (isConnected && supabase && currentUser) {
-      supabase.from('cart')
-        .delete()
-        .eq('user_id', currentUser.id)
-        .eq('product_id', productId)
-        .then(({ error }) => {
-          if (error) console.warn("Could not remove item from remote sync cart:", error);
-        });
+      try {
+        console.log(`[ShopContext] Syncing cart removal with Supabase for product: ${productId}`);
+        const { error } = await supabase.from('cart')
+          .delete()
+          .eq('user_id', currentUser.id)
+          .eq('product_id', productId);
+        
+        if (error) throw error;
+
+        // Only remove from state if DB succeeded
+        setCartItems(prev => prev.filter(item => item.product_id !== productId));
+        console.log(`[ShopContext] Removed from Supabase and frontend.`);
+      } catch (err: any) {
+        console.error("[ShopContext] Supabase removal error:", err);
+        toastError(`Failed to remove item: ${err.message || "Database error"}`);
+      }
+    } else {
+      setCartItems(prev => prev.filter(item => item.product_id !== productId));
     }
   };
 
-  const updateCartQuantity = (productId: string, quantity: number) => {
+  const updateCartQuantity = async (productId: string, quantity: number) => {
     if (quantity <= 0) {
       removeFromCart(productId);
       return;
     }
-    setCartItems(prev => prev.map(item => {
-      if (item.product_id === productId) {
-        return { ...item, quantity };
-      }
-      return item;
-    }));
 
     if (isConnected && supabase && currentUser) {
       const cartObj = {
@@ -878,25 +1012,50 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
       const dbCartPayload = filterPayloadForTable(cartObj, detectedCartColumns);
 
-      supabase.from('cart')
-        .update(dbCartPayload)
-        .eq('user_id', currentUser.id)
-        .eq('product_id', productId)
-        .then(({ error }) => {
-          if (error) console.warn("Could not sync quantity in base:", error);
-        });
+      try {
+        const { error } = await supabase.from('cart')
+          .update(dbCartPayload)
+          .eq('user_id', currentUser.id)
+          .eq('product_id', productId);
+        
+        if (error) throw error;
+        
+        setCartItems(prev => prev.map(item => {
+          if (item.product_id === productId) {
+            return { ...item, quantity };
+          }
+          return item;
+        }));
+      } catch (err: any) {
+        console.error("[ShopContext] Update cart quantity error:", err);
+        toastError(`Failed to update quantity: ${err.message || "Database error"}`);
+      }
+    } else {
+      setCartItems(prev => prev.map(item => {
+        if (item.product_id === productId) {
+          return { ...item, quantity };
+        }
+        return item;
+      }));
     }
   };
 
-  const clearCart = () => {
-    setCartItems([]);
+  const clearCart = async () => {
     if (isConnected && supabase && currentUser) {
-      supabase.from('cart')
-        .delete()
-        .eq('user_id', currentUser.id)
-        .then(({ error }) => {
-          if (error) console.warn("Failed to clear remote cart state:", error);
-        });
+      try {
+        const { error } = await supabase.from('cart')
+          .delete()
+          .eq('user_id', currentUser.id);
+        
+        if (error) throw error;
+        setCartItems([]);
+        toastSuccess("Cart cleared.");
+      } catch (err: any) {
+        console.error("[ShopContext] Clear cart error:", err);
+        toastError(`Failed to clear cart: ${err.message || "Database error"}`);
+      }
+    } else {
+      setCartItems([]);
     }
   };
 
@@ -907,116 +1066,130 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // --- ORDERS SYSTEM ---
 
-  const placeOrder = async (shippingAddress: string) => {
+  const placeOrder = async (shippingAddress: string, paymentReference?: string, paymentStatus: string = 'paid', skipClearCart: boolean = false) => {
     if (cartItems.length === 0) return { success: false, error: 'Empty Shopping Cart' };
 
     if (isConnected && supabase && currentUser) {
       try {
         const orderId = generateUUID();
+        
+        // Prepare items for JSON storage
+        const itemsPayload = cartItems.map(item => ({
+          id: generateUUID(),
+          order_id: orderId,
+          product_id: item.product_id,
+          vendor_id: item.product?.vendor_id || null,
+          quantity: item.quantity,
+          price_at_purchase: item.product?.price || 0,
+          created_at: new Date().toISOString(),
+          // Store product metadata directly in the items array for zero-join retrieval
+          product: item.product
+        }));
+
         const newOrderObj = {
           id: orderId,
           buyer_id: currentUser.id,
-          total_price: cartTotal,
-          payment_status: 'pending',
-          order_status: 'pending',
+          total_price: Number(cartTotal),
+          status: paymentStatus === 'pending' ? 'pending' : 'paid',
           shipping_address: shippingAddress,
+          customer_email: currentUser.email,
+          items: itemsPayload,
+          payment_reference: paymentReference || null,
           created_at: new Date().toISOString()
         };
 
-        const dbOrderPayload = buildOrderDbPayload(newOrderObj, detectedOrderColumns);
+        const dbOrderPayload = {
+          id: newOrderObj.id,
+          buyer_id: newOrderObj.buyer_id,
+          total_price: newOrderObj.total_price,
+          status: newOrderObj.status,
+          shipping_address: newOrderObj.shipping_address,
+          customer_email: newOrderObj.customer_email,
+          items: newOrderObj.items,
+          payment_reference: newOrderObj.payment_reference,
+          created_at: newOrderObj.created_at
+        };
 
-        // Create order
-        const { data: ordRaw, error: ordErr } = await supabase
+        console.log("[ShopContext] Creating merged order record...", dbOrderPayload);
+        
+        const { error: ordErr } = await supabase
           .from('orders')
-          .insert(dbOrderPayload)
-          .select()
-          .single();
+          .insert(dbOrderPayload);
 
         if (ordErr) throw ordErr;
-
-        const resolvedOrder = mapDbToOrder(ordRaw);
-
-        // Create order items
-        const rawItems = cartItems.map(item => {
-          const itemObj = {
-            order_id: resolvedOrder.id,
-            product_id: item.product_id,
-            quantity: item.quantity,
-            price_at_purchase: item.product?.price || 0,
-            created_at: new Date().toISOString()
-          };
-          return buildOrderItemDbPayload(itemObj, detectedOrderItemColumns);
-        });
-
-        const { error: itemErr } = await supabase
-          .from('order_items')
-          .insert(rawItems);
-
-        if (itemErr) throw itemErr;
-
+        
+        // Optimistic State Update
+        const resolvedOrder = mapDbToOrder(newOrderObj);
         setOrders(prev => [resolvedOrder, ...prev]);
-        clearCart();
-        return { success: true, orderId: resolvedOrder.id };
+        
+        if (!skipClearCart) {
+          // Instant Cart Clear
+          setCartItems([]);
+          localStorage.removeItem('jumia_cart_items');
+          
+          try {
+            await supabase.from('cart').delete().eq('user_id', currentUser.id);
+          } catch (scErr) {
+            console.warn("[ShopContext] Cart cleanup warning:", scErr);
+          }
+        }
+        
+        return { success: true, orderId: orderId };
       } catch (err: any) {
-        return { success: false, error: err.message };
+        console.error("[ShopContext] Merged Order Critical Failure:", err);
+        return { success: false, error: err.message || 'Payment accepted but records failed to save.' };
       }
     } else {
-      return { success: false, error: 'Database is not connected or signed in. Orders cannot be created.' };
+      return { success: false, error: 'Database is not connected or signed in.' };
     }
   };
 
-  const updateOrderStatus = async (orderId: string, status: Order['order_status']) => {
+  const updateOrderStatus = async (orderId: string, status: string) => {
     if (isConnected && supabase) {
       try {
-        const payload: any = {};
-        if (detectedOrderColumns.includes('order_status')) {
-          payload.order_status = status;
-        }
-        if (detectedOrderColumns.includes('status')) {
-          payload.status = status;
-        }
-
         const { error } = await supabase
           .from('orders')
-          .update(payload)
+          .update({ status })
           .eq('id', orderId);
 
         if (error) throw error;
-        setOrders(prev => prev.map(o => o.id === orderId ? { ...o, order_status: status } : o));
+        setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o));
         return true;
-      } catch (_) {
+      } catch (err: any) {
+        console.error("[ShopContext] Update order status error:", err);
         return false;
       }
-    } else {
-      return false;
     }
+    return false;
   };
 
-  const updatePaymentStatus = async (orderId: string, status: Order['payment_status']) => {
+  const updateOrderPayment = async (orderId: string, reference: string, status: string = 'paid') => {
     if (isConnected && supabase) {
       try {
-        const payload: any = {};
-        if (detectedOrderColumns.includes('payment_status')) {
-          payload.payment_status = status;
-        }
-        if (detectedOrderColumns.includes('status')) {
-          payload.status = status === 'paid' ? 'paid' : status;
-        }
-
         const { error } = await supabase
           .from('orders')
-          .update(payload)
+          .update({ 
+            status, 
+            payment_reference: reference 
+          })
           .eq('id', orderId);
 
         if (error) throw error;
-        setOrders(prev => prev.map(o => o.id === orderId ? { ...o, payment_status: status } : o));
+        
+        setOrders(prev => prev.map(o => 
+          o.id === orderId ? { ...o, status, payment_reference: reference } : o
+        ));
         return true;
-      } catch (_) {
+      } catch (err: any) {
+        console.error("[ShopContext] Update order payment error:", err);
         return false;
       }
-    } else {
-      return false;
     }
+    return false;
+  };
+
+  const updatePaymentStatus = async (orderId: string, status: string) => {
+    return updateOrderStatus(orderId, status);
   };
 
   // Re-fetch product detail associations on list changes (for cart rendering robustness)
@@ -1063,6 +1236,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
       cartTotal,
       placeOrder,
       updateOrderStatus,
+      updateOrderPayment,
       updatePaymentStatus,
       searchQuery,
       setSearchQuery

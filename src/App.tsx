@@ -14,6 +14,7 @@ import { ViewAuth } from './components/ViewAuth';
 import { ViewStorefront } from './components/ViewStorefront';
 import { DashboardVendor } from './components/DashboardVendor';
 import { DashboardAdmin } from './components/DashboardAdmin';
+import { DashboardBuyer } from './components/DashboardBuyer';
 import { PROMOTIONS } from './data/dummyData';
 import { CATEGORIES, CategoryType } from './types';
 import { 
@@ -388,9 +389,26 @@ const AppContent: React.FC = () => {
               />
             )}
 
-            {/* 8. VENDOR HOUSING DASHBOARD */}
+            {/* 8. BUYER DASHBOARD */}
+            {navigation.view === 'buyer-dashboard' && (
+              currentUser ? (
+                <DashboardBuyer />
+              ) : (
+                <div className="max-w-md mx-auto py-16 px-4 text-center space-y-4">
+                  <div className="bg-amber-50 p-6 rounded-xl border border-amber-200">
+                    <p className="text-sm font-extrabold text-amber-900 uppercase tracking-wider">Authentication Required</p>
+                    <p className="text-xs text-amber-700 mt-2 font-medium leading-relaxed">Please sign in to access your personal dashboard and order history.</p>
+                  </div>
+                  <button onClick={() => handleNavigate('auth')} className="bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs uppercase px-5 py-2.5 rounded transition shadow-sm cursor-pointer">
+                    Go to Login / Register
+                  </button>
+                </div>
+              )
+            )}
+
+            {/* 9. VENDOR HOUSING DASHBOARD */}
             {navigation.view === 'vendor-dashboard' && (
-              currentUser?.role === 'vendor' ? (
+              currentUser?.role === 'vendor' || currentUser?.role === 'admin' ? (
                 <DashboardVendor />
               ) : (
                 <div className="max-w-md mx-auto py-16 px-4 text-center space-y-4">
@@ -405,7 +423,7 @@ const AppContent: React.FC = () => {
               )
             )}
 
-            {/* 9. COORDINATOR ADMIN DASHBOARD */}
+            {/* 10. COORDINATOR ADMIN DASHBOARD */}
             {navigation.view === 'admin-dashboard' && (
               currentUser?.role === 'admin' ? (
                 <DashboardAdmin />

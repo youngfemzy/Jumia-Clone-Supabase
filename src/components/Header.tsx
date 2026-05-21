@@ -152,37 +152,64 @@ export const Header: React.FC<HeaderProps> = ({ activeView, onNavigate }) => {
                     <p className="text-xs text-gray-400 truncate mt-0.5">{currentUser.email}</p>
                   </div>
 
-                  {/* Role Switcher */}
-                  <div className="px-3 py-1 bg-orange-50 mx-2 rounded-md mb-2">
-                    <p className="text-[10px] text-orange-950 font-bold uppercase tracking-wider flex items-center">
-                      <Sparkles className="w-3 h-3 mr-1 text-orange-500" /> Account View
-                    </p>
-                    <p className="text-[9px] text-orange-700 leading-snug font-medium mt-0.5">Switch view perspective for your profile</p>
-                  </div>
+                  {/* Removed Switch Role Perspective for normal users per request */}
+                  {currentUser.role === 'admin' && (
+                    <div className="px-3 py-1 bg-orange-50 mx-2 rounded-md mb-2">
+                      <p className="text-[10px] text-orange-950 font-bold uppercase tracking-wider flex items-center">
+                        <Sparkles className="w-3 h-3 mr-1 text-orange-500" /> Administrative view
+                      </p>
+                      <p className="text-[9px] text-orange-700 leading-snug font-medium mt-0.5">Switch view perspective for debugging</p>
+                    </div>
+                  )}
 
                   <button 
-                    onClick={() => { updateRole('buyer'); setShowRoleSelector(false); onNavigate('home'); }}
+                    onClick={() => { setShowRoleSelector(false); onNavigate('buyer-dashboard'); }}
                     className="w-full text-left px-4 py-1.5 text-xs hover:bg-gray-50 flex items-center justify-between"
                   >
-                    <span className="flex items-center"><User className="w-3.5 h-3.5 mr-2" /> Buyer View</span>
-                    {currentUser.role === 'buyer' && <Check className="w-3.5 h-3.5 text-orange-500" />}
+                    <span className="flex items-center"><User className="w-3.5 h-3.5 mr-2" /> My Orders</span>
+                    {activeView === 'buyer-dashboard' && <Check className="w-3.5 h-3.5 text-orange-500" />}
                   </button>
 
-                  <button 
-                    onClick={() => { updateRole('vendor'); setShowRoleSelector(false); onNavigate('vendor-dashboard'); }}
-                    className="w-full text-left px-4 py-1.5 text-xs hover:bg-gray-50 flex items-center justify-between"
-                  >
-                    <span className="flex items-center"><Store className="w-3.5 h-3.5 mr-2" /> Vendor Dashboard</span>
-                    {currentUser.role === 'vendor' && <Check className="w-3.5 h-3.5 text-orange-500" />}
-                  </button>
+                  {(currentUser.role === 'vendor' || currentUser.role === 'admin') && (
+                    <button 
+                      onClick={() => { setShowRoleSelector(false); onNavigate('vendor-dashboard'); }}
+                      className="w-full text-left px-4 py-1.5 text-xs hover:bg-gray-50 flex items-center justify-between"
+                    >
+                      <span className="flex items-center"><Store className="w-3.5 h-3.5 mr-2" /> Vendor Dashboard</span>
+                      {activeView === 'vendor-dashboard' && <Check className="w-3.5 h-3.5 text-orange-500" />}
+                    </button>
+                  )}
 
-                  <button 
-                    onClick={() => { updateRole('admin'); setShowRoleSelector(false); onNavigate('admin-dashboard'); }}
-                    className="w-full text-left px-4 py-1.5 text-xs hover:bg-gray-50 flex items-center justify-between"
-                  >
-                    <span className="flex items-center"><ShieldCheck className="w-3.5 h-3.5 mr-2" /> Admin Panel</span>
-                    {currentUser.role === 'admin' && <Check className="w-3.5 h-3.5 text-orange-500" />}
-                  </button>
+                  {currentUser.role === 'admin' && (
+                    <button 
+                      onClick={() => { setShowRoleSelector(false); onNavigate('admin-dashboard'); }}
+                      className="w-full text-left px-4 py-1.5 text-xs hover:bg-gray-50 flex items-center justify-between"
+                    >
+                      <span className="flex items-center"><ShieldCheck className="w-3.5 h-3.5 mr-2" /> Admin Panel</span>
+                      {activeView === 'admin-dashboard' && <Check className="w-3.5 h-3.5 text-orange-500" />}
+                    </button>
+                  )}
+
+                  {/* Restricted Area - Only for testing or elevated accounts */}
+                  {currentUser.role === 'admin' && (
+                    <div className="px-3 py-2 border-t border-gray-100 mt-1 pb-3">
+                      <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mb-2">Admin Tools</p>
+                      <div className="flex gap-2">
+                         <button 
+                          onClick={() => { updateRole('buyer'); setShowRoleSelector(false); onNavigate('home'); }}
+                          className={`flex-1 py-1.5 rounded text-[9px] font-bold uppercase transition border ${currentUser.role === 'buyer' ? 'bg-orange-500 text-white border-orange-500 shadow-sm shadow-orange-500/20' : 'bg-gray-50 text-gray-500 border-gray-200'}`}
+                         >
+                           to Buyer
+                         </button>
+                         <button 
+                          onClick={() => { updateRole('vendor'); setShowRoleSelector(false); onNavigate('vendor-dashboard'); }}
+                          className={`flex-1 py-1.5 rounded text-[9px] font-bold uppercase transition border ${currentUser.role === 'vendor' ? 'bg-orange-500 text-white border-orange-500 shadow-sm shadow-orange-500/20' : 'bg-gray-50 text-gray-500 border-gray-200'}`}
+                         >
+                           to Vendor
+                         </button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Dashboard routing buttons */}
                   {currentUser.role === 'vendor' && (
