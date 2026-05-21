@@ -161,3 +161,46 @@ CREATE POLICY "Vendors Fulfillment" ON public.orders FOR SELECT USING (
     )
 );
 ```
+
+---
+
+## 🚀 Deployment
+
+### 1. Supabase Setup
+- Create a new project at [supabase.com](https://supabase.com).
+- Open the **SQL Editor** in the Supabase dashboard.
+- Copy the content of `database.sql` (or the SQL block above) and run it.
+- This will create the necessary tables (`profile`, `vendors`, `products`, `cart`, `orders`) and set up **Row Level Security** policies.
+
+### 2. Environment Variables
+Configure the following in your deployment platform (Vercel, Netlify, or local `.env`):
+- `VITE_SUPABASE_URL`: Your Supabase Project URL.
+- `VITE_SUPABASE_PUBLISHABLE_KEY`: Your Supabase Anon Key.
+- `VITE_PAYSTACK_PUBLIC_KEY`: (Optional) For payment integration.
+
+### 3. Build & Deploy
+```bash
+npm install
+npm run build
+```
+The static files will be generated in the `dist/` directory, ready to be served by any static hosting provider.
+
+---
+
+## 🛠️ Tech Stack & Architecture
+
+- **Framework**: React 19 with Vite
+- **Styling**: Tailwind CSS 4
+- **Animations**: Framer Motion
+- **Icons**: Lucide React
+- **Backend**: Supabase (PostgreSQL)
+- **State Management**: React Context API with real-time Supabase sync.
+
+---
+
+## 🏗️ Core Features Implemented
+- **Professional Layout**: Jumia-inspired storefront with category navigation and flash sales.
+- **Multivendor Engine**: Separate dashboards for Buyers, Vendors, and Admins.
+- **Dynamic Cart**: Synchronizes between local storage and database for persistent shopping.
+- **Real-time Order Snapping**: Orders preserve product data at the time of purchase in JSONB format.
+- **No Mock Data**: Every product, vendor, and order is pulled directly from your Supabase instance.
