@@ -468,7 +468,15 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
           await detectDbSchema();
           const { data: { session }, error: sessionError } = await supabase.auth.getSession();
           
-          if (sessionError) throw sessionError;
+          if (sessionError) {
+            // Handle common refresh token errors gracefully by signing out to clear invalid state
+            if (sessionError.message.includes('Refresh Token Not Found') || sessionError.message.includes('Invalid Refresh Token')) {
+              console.warn('[ShopContext] Invalid session detected, clearing auth state:', sessionError.message);
+              await supabase.auth.signOut();
+            } else {
+              throw sessionError;
+            }
+          }
 
           if (session?.user) {
             try {
