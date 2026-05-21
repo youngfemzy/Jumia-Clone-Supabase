@@ -1,22 +1,36 @@
 import React, { useState, useMemo } from 'react';
+import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useShop } from '../context/ShopContext';
 import { CATEGORIES, CategoryType } from '../types';
 import { ProductCard } from './ProductCard';
 import { SlidersHorizontal, ArrowUpDown, RefreshCw, Star } from 'lucide-react';
 
-interface ViewCategoryProps {
-  initialCategory?: CategoryType;
-  initialSearch?: string;
-  onNavigate: (view: string, params?: any) => void;
-}
-
-export const ViewCategory: React.FC<ViewCategoryProps> = ({ initialCategory, initialSearch, onNavigate }) => {
+export const ViewCategory: React.FC = () => {
+  const { category: urlCategory } = useParams<{ category: any }>();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { products, searchQuery, setSearchQuery } = useShop();
 
-  const [selectedCategory, setSelectedCategory] = useState<CategoryType | 'All'>(initialCategory || 'All');
+  const initialSearch = searchParams.get('search') || '';
+  const initialCategory = urlCategory || 'All';
+
+  const [selectedCategory, setSelectedCategory] = useState<CategoryType | 'All'>(initialCategory as any);
   const [priceRange, setPriceRange] = useState<number>(3500);
   const [sortOption, setSortOption] = useState<string>('featured');
   const [minRating, setMinRating] = useState<number>(0);
+
+  // Sync state if URL changes
+  React.useEffect(() => {
+    if (urlCategory) {
+       setSelectedCategory(urlCategory as any);
+    } else {
+       setSelectedCategory('All');
+    }
+  }, [urlCategory]);
+
+  React.useEffect(() => {
+    if (initialSearch) setSearchQuery(initialSearch);
+  }, [initialSearch]);
 
   // Filters calculation
   const filteredProducts = useMemo(() => {
@@ -211,7 +225,7 @@ export const ViewCategory: React.FC<ViewCategoryProps> = ({ initialCategory, ini
           {filteredProducts.length > 0 ? (
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
               {filteredProducts.map((p) => (
-                <ProductCard key={p.id} product={p} onNavigate={onNavigate} />
+                <ProductCard key={p.id} product={p} />
               ))}
             </div>
           ) : (

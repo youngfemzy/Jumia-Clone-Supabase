@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Product, Vendor, Profile, Order, OrderItem, CartItem, UserRole, CategoryType } from '../types';
 import { getSupabase, isConfigured, supabaseUrl, supabaseAnonKey } from '../lib/supabase';
-import { SAMPLE_PRODUCTS, SAMPLE_VENDORS } from '../data/dummyData';
 import { useToast } from './ToastContext';
 
 // Dynamic Database Schema Metadata
@@ -368,210 +367,180 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Check Supabase actual connection health & load initial metadata
   useEffect(() => {
-    const initializeApp = async () => {
-      setLoadingAuth(true);
+    let isMounted = true;
 
-      const detectDbSchema = async () => {
-        if (!supabaseConfigured || !supabaseUrl || !supabaseAnonKey) return;
-        try {
-          const res = await fetch(`${supabaseUrl}/rest/v1/`, {
-            headers: { apikey: supabaseAnonKey }
-          });
-          if (res.ok) {
-            const spec = await res.json();
-            if (spec && spec.definitions) {
-              if (spec.definitions.profile) {
-                const profileCols = Object.keys(spec.definitions.profile.properties || {});
-                if (profileCols.length > 0) {
-                  detectedProfileColumns = profileCols;
-                  console.log('[Supabase Schema Detection] Detected profile columns:', detectedProfileColumns);
-                }
-              }
-              if (spec.definitions.vendors) {
-                const vendorCols = Object.keys(spec.definitions.vendors.properties || {});
-                if (vendorCols.length > 0) {
-                  detectedVendorColumns = vendorCols;
-                  console.log('[Supabase Schema Detection] Detected vendor columns:', detectedVendorColumns);
-                }
-              }
-              if (spec.definitions.products) {
-                const productCols = Object.keys(spec.definitions.products.properties || {});
-                if (productCols.length > 0) {
-                  detectedProductColumns = productCols;
-                  console.log('[Supabase Schema Detection] Detected product columns:', detectedProductColumns);
-                }
-              }
-              if (spec.definitions.orders) {
-                const orderCols = Object.keys(spec.definitions.orders.properties || {});
-                if (orderCols.length > 0) {
-                  detectedOrderColumns = orderCols;
-                  console.log('[Supabase Schema Detection] Detected order columns:', detectedOrderColumns);
-                }
-              }
-              if (spec.definitions.cart) {
-                const cartCols = Object.keys(spec.definitions.cart.properties || {});
-                if (cartCols.length > 0) {
-                  detectedCartColumns = cartCols;
-                  console.log('[Supabase Schema Detection] Detected cart columns:', detectedCartColumns);
-                }
-              }
-            }
-          }
-        } catch (err) {
-          console.warn('[Supabase Schema Detection] Failed to retrieve OpenAPI schema:', err);
-        }
-      };
+    const initializeApp = async () => {
+      if (!isMounted) return;
       
-      // Load cart from localStorage initially
+      // Load cart from localStorage initially (fastest)
       const cachedCart = localStorage.getItem('jumia_cart_items');
       if (cachedCart) {
         try {
-          setCartItems(JSON.parse(cachedCart));
+          const parsed = JSON.parse(cachedCart);
+          if (isMounted) setCartItems(parsed);
         } catch (_) {}
       }
 
-      const fetchCartFromSupabase = async (userId: string) => {
-        if (!supabase) return;
-        try {
-          const { data, error } = await supabase
-            .from('cart')
-            .select('*')
-            .eq('user_id', userId);
-          
-          if (error) {
-            console.error("[ShopContext] Failed to fetch cart from Supabase:", error);
-            return;
-          }
-
-          if (data && data.length > 0) {
-            console.log("[ShopContext] Loaded cart from Supabase:", data);
-            // We need to associate product details because the cart table usually only has product_id
-            const cartWithProducts: CartItem[] = data.map(dbItem => {
-              const product = products.find(p => p.id === dbItem.product_id);
-              return {
-                id: dbItem.id || `cart-${Math.random().toString(36).substring(2, 9)}`,
-                user_id: dbItem.user_id,
-                product_id: dbItem.product_id,
-                quantity: dbItem.quantity,
-                product
-              };
-            });
-            setCartItems(cartWithProducts);
-          }
-        } catch (err) {
-          console.error("[ShopContext] Error fetching cart:", err);
-        }
-      };
-
       if (supabase && supabaseConfigured) {
         try {
-          await detectDbSchema();
-          const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+          // Parallelize Auth Check and Marketplace Data Fetch
+          const sessionPromise = supabase.auth.getSession();
+          const productsPromise = fetchProducts();
+          const vendorsPromise = fetchVendors();
+          const ordersPromise = fetchOrders();
+
+          const { data: { session }, error: sessionError } = await sessionPromise;
           
           if (sessionError) {
-            // Handle common refresh token errors gracefully by signing out to clear invalid state
-            if (sessionError.message.includes('Refresh Token Not Found') || sessionError.message.includes('Invalid Refresh Token')) {
-              console.warn('[ShopContext] Invalid session detected, clearing auth state:', sessionError.message);
+            if (sessionError.message.includes('Token') || sessionError.message.includes('Invalid')) {
               await supabase.auth.signOut();
             } else {
               throw sessionError;
             }
           }
 
-          if (session?.user) {
+          setIsConnected(true);
+
+          if (session?.user && isMounted) {
+            // Profile sync MUST happen for ProtectedRoutes but we can parallelize it with data loads
             try {
               const { profile, vendor } = await syncUserProfileAndVendor(session.user);
-              setCurrentUser(profile);
-              setCurrentVendor(vendor);
-              // Fetch cart after profile is synced
-              await fetchCartFromSupabase(session.user.id);
-            } catch (syncErr) {
-              console.error("Initialize profile sync failed, falling back to basic setup", syncErr);
+              if (isMounted) {
+                setCurrentUser(profile);
+                setCurrentVendor(vendor);
+                syncCartFromDb(profile.id);
+              }
+            } catch (e) {
+              console.error("Initial profile sync error:", e);
             }
           }
 
-          setIsConnected(true);
+          // Ensure data loads finish but we don't block auth loading state on them
+          // unless explicitly needed. But products are already in state as samples.
+          
+          if (isMounted) setLoadingAuth(false);
 
-          // Build listener for live Auth changes
           const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
             if (currentSession?.user) {
-              try {
-                const { profile, vendor } = await syncUserProfileAndVendor(currentSession.user);
-                setCurrentUser(profile);
-                setCurrentVendor(vendor);
-              } catch (syncErr) {
-                console.error("Live auth state change profile sync failed", syncErr);
-              }
+              syncUserProfileAndVendor(currentSession.user).then(({ profile, vendor }) => {
+                if (isMounted) {
+                  setCurrentUser(profile);
+                  setCurrentVendor(vendor);
+                  syncCartFromDb(profile.id);
+                }
+              });
             } else {
-              setCurrentUser(null);
-              setCurrentVendor(null);
+              if (isMounted) {
+                setCurrentUser(null);
+                setCurrentVendor(null);
+              }
             }
           });
 
-          // Fetch products, vendors, profiles, orders
-          await fetchMarketplaceData();
-
           return () => {
+            isMounted = false;
             subscription.unsubscribe();
           };
 
         } catch (err) {
-          console.error("Supabase auth check failed. Sticking with safe empty state:", err);
-          setIsConnected(false);
-          setProducts([]);
-          setVendors([]);
-          setOrders([]);
+          console.error("Supabase initialize failed:", err);
+          if (isMounted) {
+            setIsConnected(false);
+            setLoadingAuth(false);
+          }
         }
       } else {
-        setIsConnected(false);
-        setProducts([]);
-        setVendors([]);
-        setOrders([]);
+        if (isMounted) {
+          setIsConnected(false);
+          setLoadingAuth(false);
+        }
       }
-      setLoadingAuth(false);
     };
 
     initializeApp();
+    return () => { isMounted = false; };
   }, [supabaseConfigured]);
 
-  const fetchMarketplaceData = async () => {
+  const fetchProducts = async () => {
     if (!supabase) return;
     try {
-      // Products
-      const { data: realProducts } = await supabase
-        .from('products')
-        .select('*');
-      
-      // Vendors
-      const { data: realVendors } = await supabase
-        .from('vendors')
-        .select('*');
+      const { data, error } = await supabase.from('products').select('*');
+      if (error) throw error;
+      if (data) {
+        setProducts(data.map(mapDbToProduct));
+        if (data.length > 0) {
+          console.log(`[ShopContext] ${data.length} Products loaded.`);
+        }
+      }
+    } catch (e: any) {
+      console.error("Products loading failed.", e);
+      toastError(`Failed to load products: ${e.message}`);
+    }
+  };
 
-      // Unified orders fetch
-      const { data: realOrders } = await supabase
+  const fetchVendors = async () => {
+    if (!supabase) return;
+    try {
+      const { data, error } = await supabase.from('vendors').select('*');
+      if (error) throw error;
+      if (data) {
+        setVendors(data as Vendor[]);
+        if (data.length > 0) {
+          console.log(`[ShopContext] ${data.length} Vendors loaded.`);
+        }
+      }
+    } catch (e: any) {
+      console.error("Vendors loading failed.", e);
+      toastError(`Failed to load vendors: ${e.message}`);
+    }
+  };
+
+  const fetchOrders = async () => {
+    if (!supabase) return;
+    try {
+      const { data, error } = await supabase
         .from('orders')
         .select('*')
         .order('created_at', { ascending: false });
-
-      // Sync local collections
-      if (realProducts) {
-        setProducts((realProducts as any[]).map(mapDbToProduct));
-      } else {
-        setProducts([]);
+      if (error) throw error;
+      if (data) {
+        setOrders(data.map(mapDbToOrder));
       }
+    } catch (e: any) {
+      console.error("Orders loading failed.", e);
+      toastError(`Failed to load orders: ${e.message}`);
+    }
+  };
 
-      setVendors((realVendors as any[]) || []);
+  const fetchMarketplaceData = async () => {
+    // Only show loading toast for the full manual refresh
+    toastSuccess("Refreshing marketplace data...");
+    fetchProducts();
+    fetchVendors();
+    fetchOrders();
+  };
+
+  const syncCartFromDb = async (userId: string) => {
+    if (!supabase) return;
+    try {
+      const { data, error } = await supabase
+        .from('cart')
+        .select('*, product:products(*)')
+        .eq('user_id', userId);
       
-      if (realOrders) {
-        setOrders(realOrders.map(mapDbToOrder));
-      } else {
-        setOrders([]);
+      if (error) throw error;
+      if (data && data.length > 0) {
+        const mappedCart: CartItem[] = data.map(item => ({
+          id: item.id,
+          user_id: item.user_id,
+          product_id: item.product_id,
+          quantity: item.quantity,
+          product: item.product ? mapDbToProduct(item.product) : undefined
+        }));
+        setCartItems(mappedCart);
       }
-    } catch (e) {
-      console.error("Database loading failed.", e);
-      setProducts([]);
-      setVendors([]);
-      setOrders([]);
+    } catch (err) {
+      console.error("[ShopContext] syncCartFromDb error:", err);
     }
   };
 
@@ -584,7 +553,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Auth: signup
   const signUp = async (email: string, password: string, fullName: string, role: UserRole) => {
-    setLoadingAuth(true);
+    // We don't set loadingAuth here to avoid triggering the 'Verifying Authorization' screen sitewide
     if (isConnected && supabase) {
       try {
         const { data, error } = await supabase.auth.signUp({
@@ -611,7 +580,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
             insertedVendor = vendor;
           } catch (dbErr: any) {
             console.error("Database initialization failed during signup:", dbErr);
-            throw new Error(`Account created in Supabase Auth, but application profile insertion failed! Detail: ${dbErr.message || dbErr}. Typically, this means you need to create 'profile' and 'vendors' tables in your Supabase project or adjust your database security policies.`);
+            throw new Error(`Account created in Supabase Auth, but application profile insertion failed! Detail: ${dbErr.message || dbErr}.`);
           }
         }
 
@@ -623,30 +592,26 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (role === 'vendor' && insertedVendor) {
             setCurrentVendor(insertedVendor);
           }
-          await fetchMarketplaceData();
-          setLoadingAuth(false);
+          // Do NOT await marketplace data here, trigger in background
+          fetchMarketplaceData();
           return { success: true, emailVerificationRequired: false };
         }
 
-        // If they succeeded but have no session, email verification is required
-        setLoadingAuth(false);
         return { success: true, emailVerificationRequired: true };
       } catch (err: any) {
-        setLoadingAuth(false);
         return { success: false, error: err.message || 'Operation failed' };
       }
     } else {
-      setLoadingAuth(false);
       return { 
         success: false, 
-        error: 'Supabase is not configured yet. Please configure VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY (or VITE_SUPABASE_ANON_KEY) in your .env file.' 
+        error: 'Supabase is not configured yet. Please configure VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in your .env file.' 
       };
     }
   };
 
   // Auth: Login
   const signIn = async (email: string, password: string) => {
-    setLoadingAuth(true);
+    // We don't set loadingAuth here for instant transition
     if (isConnected && supabase) {
       try {
         const { data, error } = await supabase.auth.signInWithPassword({
@@ -663,24 +628,21 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setCurrentVendor(vendor);
           } catch (syncErr: any) {
             console.error("Profile sync inside signIn failed", syncErr);
-            throw new Error(`Successfully verified credentials, but failed to load application user profile! Detail: ${syncErr.message || syncErr}. Ensure that your Supabase databases tables 'profiles' and 'vendors' exist and are publicly accessible.`);
+            throw new Error(`Verified credentials, but failed to load profile! Detail: ${syncErr.message || syncErr}.`);
           }
 
-          await fetchMarketplaceData();
-          setLoadingAuth(false);
+          // Trigger data refresh in background
+          fetchMarketplaceData();
           return { success: true };
         }
-        setLoadingAuth(false);
         return { success: false, error: 'Check credentials and try again.' };
       } catch (err: any) {
-        setLoadingAuth(false);
         return { success: false, error: err.message || 'Log in attempt failed.' };
       }
     } else {
-      setLoadingAuth(false);
       return { 
         success: false, 
-        error: 'Supabase is not configured yet. Please configure VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY (or VITE_SUPABASE_ANON_KEY) in your .env file.' 
+        error: 'Supabase is not configured yet. Please configure VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in your .env file.' 
       };
     }
   };
@@ -905,81 +867,53 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const matchedProduct = products.find(p => p.id === productId);
     if (!matchedProduct) return;
 
-    if (!currentUser) {
-      toastError("Please login to add items to cart.");
-      return;
-    }
-
-    const existingIdx = cartItems.findIndex(item => item.product_id === productId);
-    const newTotalQuantity = existingIdx > -1 ? cartItems[existingIdx].quantity + quantity : quantity;
-
-    // If connected, we MUST ensure Supabase is updated first per user request
+    // We do DB sync without awaiting to keep UI responsive
     if (isConnected && supabase && currentUser) {
+      // We'll calculate the new quantity within the set state to avoid stale closure issues
+      // But for DB we need to estimate or fetch. For simplicity and speed, we check current stale state first
+      const existing = cartItems.find(item => item.product_id === productId);
+      const targetQty = (existing ? existing.quantity : 0) + quantity;
+
       const cartObj = {
         user_id: currentUser.id,
         product_id: productId,
-        quantity: newTotalQuantity,
+        quantity: targetQty,
         created_at: new Date().toISOString()
       };
       
       const dbCartPayload = filterPayloadForTable(cartObj, detectedCartColumns);
       
-      try {
-        console.log(`[ShopContext] Syncing cart add for: ${productId} with quantity ${newTotalQuantity}`);
-        
-        // Consistent Delete -> Insert cycle to ensure one row per user/product pair.
-        const { error: delErr } = await supabase.from('cart')
-          .delete()
-          .eq('user_id', currentUser.id)
-          .eq('product_id', productId);
-        
-        if (delErr) throw delErr;
-
-        const { error: insErr } = await supabase.from('cart').insert(dbCartPayload);
-        if (insErr) throw insErr;
-
-        // Only update local state if DB succeeded
-        setCartItems(prev => {
-          const idx = prev.findIndex(item => item.product_id === productId);
-          if (idx > -1) {
-            const updated = [...prev];
-            updated[idx].quantity = newTotalQuantity;
-            return updated;
-          } else {
-            return [...prev, {
-              id: 'cart-' + Math.random().toString(36).substring(2, 9),
-              user_id: currentUser.id,
-              product_id: productId,
-              quantity: newTotalQuantity,
-              product: matchedProduct
-            }];
-          }
+      // Fire and forget DB update
+      supabase.from('cart')
+        .upsert(dbCartPayload, { onConflict: 'user_id,product_id' })
+        .then(({ error }) => {
+          if (error) console.error("[ShopContext] Cart sync error:", error);
         });
-        toastSuccess(`${matchedProduct.title} added to cart.`);
-      } catch (err: any) {
-        console.error("[ShopContext] Cart sync error:", err);
-        toastError(`Failed to sync cart: ${err.message || "Database error"}`);
-      }
-    } else {
-      // Offline/Guest fallback
-      setCartItems(prev => {
-        const idx = prev.findIndex(item => item.product_id === productId);
-        if (idx > -1) {
-          const updated = [...prev];
-          updated[idx].quantity += quantity;
-          return updated;
-        } else {
-          return [...prev, {
-            id: 'cart-' + Math.random().toString(36).substring(2, 9),
-            user_id: currentUser?.id || 'guest',
-            product_id: productId,
-            quantity,
-            product: matchedProduct
-          }];
-        }
-      });
-      toastSuccess(`${matchedProduct.title} added to cart.`);
     }
+
+    // Always update local state immediately using functional update
+    setCartItems(prev => {
+      const idx = prev.findIndex(item => item.product_id === productId);
+      if (idx > -1) {
+        const updated = [...prev];
+        updated[idx] = {
+          ...updated[idx],
+          quantity: updated[idx].quantity + quantity,
+          product: matchedProduct // Ensure product is attached
+        };
+        return updated;
+      } else {
+        return [...prev, {
+          id: 'cart-' + Math.random().toString(36).substring(2, 9),
+          user_id: currentUser?.id || 'guest',
+          product_id: productId,
+          quantity: quantity,
+          product: matchedProduct
+        }];
+      }
+    });
+
+    toastSuccess(`${matchedProduct.title} added to cart.`);
   };
 
   const removeFromCart = async (productId: string) => {

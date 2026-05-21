@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useShop } from '../context/ShopContext';
 import { 
   CheckCircle2, 
@@ -14,12 +15,9 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
-interface ViewOrderConfirmationProps {
-  orderId: string;
-  onNavigate: (view: string, params?: any) => void;
-}
-
-export const ViewOrderConfirmation: React.FC<ViewOrderConfirmationProps> = ({ orderId, onNavigate }) => {
+export const ViewOrderConfirmation: React.FC = () => {
+  const { orderId } = useParams<{ orderId: string }>();
+  const navigate = useNavigate();
   const { orders, currentUser } = useShop();
   const [order, setOrder] = useState(orders.find(o => o.id === orderId));
 
@@ -144,14 +142,14 @@ export const ViewOrderConfirmation: React.FC<ViewOrderConfirmationProps> = ({ or
           {/* ACTION BUTTONS */}
           <div className="grid grid-cols-2 gap-4">
             <button 
-              onClick={() => onNavigate('home')}
+              onClick={() => navigate('/')}
               className="flex items-center justify-center space-x-2 p-4 bg-white border border-gray-200 rounded-2xl text-xs font-black text-gray-600 uppercase tracking-widest hover:bg-gray-50 transition active:scale-95 cursor-pointer shadow-sm"
             >
               <ShoppingBag className="w-4 h-4" />
               <span>Back to Shop</span>
             </button>
             <button 
-               onClick={() => onNavigate('buyer-dashboard')}
+               onClick={() => navigate('/dashboard')}
                className="flex items-center justify-center space-x-2 p-4 bg-orange-500 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-orange-600 transition active:scale-95 cursor-pointer shadow-md shadow-orange-500/20"
             >
               <span>Track Details</span>
@@ -213,7 +211,7 @@ export const ViewOrderConfirmation: React.FC<ViewOrderConfirmationProps> = ({ or
       {/* BOTTOM FOOTER NAVIGATION */}
       <div className="pt-8 border-t border-gray-150 flex items-center justify-between">
         <button 
-          onClick={() => onNavigate('home')}
+          onClick={() => navigate('/')}
           className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center hover:text-gray-900 transition"
         >
           <ArrowLeft className="w-4 h-4 mr-2" /> Continue Browsing

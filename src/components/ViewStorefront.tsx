@@ -1,14 +1,12 @@
 import React, { useMemo } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useShop } from '../context/ShopContext';
 import { ProductCard } from './ProductCard';
 import { Store, MapPin, Calendar, Info, ShieldAlert, BadgeCheck } from 'lucide-react';
 
-interface ViewStorefrontProps {
-  vendorId: string;
-  onNavigate: (view: string, params?: any) => void;
-}
-
-export const ViewStorefront: React.FC<ViewStorefrontProps> = ({ vendorId, onNavigate }) => {
+export const ViewStorefront: React.FC = () => {
+  const { vendorId } = useParams<{ vendorId: string }>();
+  const navigate = useNavigate();
   const { vendors, products } = useShop();
 
   const vendor = useMemo(() => {
@@ -24,7 +22,7 @@ export const ViewStorefront: React.FC<ViewStorefrontProps> = ({ vendorId, onNavi
       <div className="max-w-7xl mx-auto px-4 py-24 text-center">
         <p className="text-gray-500 text-sm">Requested storefront does not exist or has been removed.</p>
         <button 
-          onClick={() => onNavigate('home')}
+          onClick={() => navigate('/')}
           className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-6 rounded mt-4"
         >
           Return to Marketplace
@@ -122,7 +120,7 @@ export const ViewStorefront: React.FC<ViewStorefrontProps> = ({ vendorId, onNavi
           {vendorProducts.length > 0 ? (
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-6">
               {vendorProducts.map((p) => (
-                <ProductCard key={p.id} product={p} onNavigate={onNavigate} />
+                <ProductCard key={p.id} product={p} />
               ))}
             </div>
           ) : (

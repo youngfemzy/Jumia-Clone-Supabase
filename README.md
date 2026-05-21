@@ -1,156 +1,163 @@
-# Jumia Clone - Professional E-Commerce Suite
+# Jumia Clone Professional Edition - Dev Documentation
 
-This is a high-performance, multi-vendor e-commerce marketplace inspired by Jumia.com. It features a modern React frontend and a scalable Supabase backend with high-integrity payment processing.
-
----
-
-## 📖 Full Documentation
-
-### Core Ecosystem
-You are building a modern multivendor ecommerce marketplace inspired by the layout, structure, and shopping experience of Jumia.com.
-
-The platform supports multiple vendors selling hardware, fashion, electronics, and daily essentials across these categories:
-- Groceries, Phones, Laptops, Fashion, Home Appliances, Electronics, Beauty Products, Gaming, Accessories.
-
-### Important Development Rules
-- **Direct Integration**: No fake backend logic or mock auth. All data flows directly through Supabase.
-- **Unified Order Architecture**: To prevent "stuck" orders during payment redirects, orders are created in a `pending` state with all line items nested as **JSONB** in the `orders` table *before* the payment gateway (Paystack) is triggered.
-- **Security**: Row Level Security (RLS) is strictly enforced for all user roles.
-- **Performance**: High use of Tailwind CSS for styling and Framer Motion for premium transitions.
-- **Mobile First**: Fully responsive UI with a sticky header and mobile bottom navigation.
-
-### Pages & Dashboards
-- **Public**: Home (Jumia-style), Product List, Categories, Product Detail, Vendor Storefronts, Cart, Checkout.
-- **Buyer Dashboard**: Order history tracking and payment status management.
-- **Vendor Dashboard**: Inventory CRUD, Sales overview, and fulfillment status updates.
-- **Admin Dashboard**: Global platform management for users, vendors, and orders.
+This repository contains the source code for a production-grade, multivendor e-commerce marketplace built to emulate **Jumia.com**. It leverages **React**, **Tailwind CSS**, and **Supabase** for a scalable, secure, and fast shopping experience.
 
 ---
 
-## 📂 Database Schema
+## 🤖 The Ultimate AI Build Prompt
 
-### Tables
-| Table | Fields | RLS Rules |
-| :--- | :--- | :--- |
-| `profile` | `id`, `full_name`, `email`, `role` (buyer/vendor/admin), `avatar_url` | Users manage own; Admin manages all. |
-| `vendors` | `id`, `user_id`, `store_name`, `store_slug`, `logo_url`, `banner_url`, `description` | Public view; Vendors manage own. |
-| `products` | `id`, `vendor_id`, `title`, `slug`, `description`, `category`, `price`, `stock`, `image_urls` | Public view; Vendors manage own inventory. |
-| `orders` | `id`, `buyer_id`, `total_price`, `status`, `shipping_address`, `items` (JSONB), `payment_reference` | Buyers manage own; Admin manages all. |
-| `cart` | `id`, `user_id`, `product_id`, `quantity` | Users manage own cart sessions. |
+*Use this prompt to replicate this exact architecture in any AI coding environment:*
 
-### Storage Buckets
-- `product-images`: Public read access. Vendors can upload/delete their own product assets.
-- `store-assets`: Logos and banners for vendor branding.
-- `receipts`: Storage for payment invoices and receipts.
+> **You are an expert senior full-stack ecommerce engineer and UI/UX designer.**
+>
+> **Build a modern multivendor ecommerce marketplace inspired by the layout, structure, and shopping experience of Jumia.com.**
+>
+> The platform should support multiple vendors selling different categories of products including:
+> - Groceries
+> - Phones
+> - Laptops
+> - Fashion
+> - Home Appliances
+> - Electronics
+> - Beauty Products
+> - Gaming
+> - Accessories
+>
+> The design should feel modern, clean, responsive, fast, and production-ready.
+>
+> ==================================================
+> TECH STACK
+> ==================================================
+>
+> **Frontend**:
+> - React / Vite
+> - Tailwind CSS
+> - Framer Motion for subtle animations
+> - Lucide React for modern iconography
+>
+> **Backend**:
+> - Supabase (Auth, Database, Storage)
+> - Row Level Security (RLS) for all tables
+>
+> ==================================================
+> CORE ARCHITECTURE RULES
+> ==================================================
+> 1. **Unified Order System**: Orders must be created in the `orders` table snapshotting all items as a **JSONB** array *before* redirecting to payment.
+> 2. **Authentication**: Three clear roles: `buyer`, `vendor`, `admin`.
+> 3. **Persistence**: The cart must sync between standard local state and the Supabase `cart` table.
+> 4. **Multivendor Visibility**: Vendors must only see orders containing their products (via JSONB item filtering).
+> 5. **Clean Routing**: Use React Router for distinct pathing (`/product/:id`, `/category/:name`, `/store/:id`).
+> 6. **Zero Mocking**: No fake data in production. All elements must pull from the database.
 
 ---
 
-## 🤖 Re-Engineering Prompt for AI
+## 📖 Functional documentation
 
-*Copy and paste this prompt to another AI to replicate this project with maximum accuracy:*
+### 1. Unified Fulfillment Logic
+To prevent loss of transaction data, we use a **Merged Order Schema**. Instead of splitting orders into two tables at the expensive database layer, we snapshot the state of the cart into a single `items` JSONB column in the `orders` record. This allows vendors to search for their `vendor_id` inside any global order and fulfill their specific items without affecting other vendors in the same order.
 
-> "You are an expert senior full-stack ecommerce engineer and UI/UX designer. Build a modern multivendor ecommerce marketplace inspired by the layout, structure, and shopping experience of Jumia.com.
-> 
-> **Tech Stack**: React 18 (Vite), Tailwind CSS, Framer Motion, and Supabase.
-> 
-> **Core Architecture Requirements**: 
-> 1. **Unified Order System**: Checkout must create a row in the `orders` table with status 'pending' AND all cart items stored as a JSONB array (`items` column) BEFORE the Paystack popup triggers. This ensures the order exists even if the popup is closed or the user refreshes. 
-> 2. **Roles**: Handle 'buyer', 'vendor', and 'admin' roles using Supabase Auth and a linked `profile` table.
-> 3. **UI/UX**: Implement a Jumia-branded aesthetic (Orange/White/Gold) with a sticky header, mobile bottom navigation, and skeleton loading states.
-> 4. **Fulfillment**: Vendors must see orders containing their products (via JSONB item filtering) and be able to update status.
-> 
-> **Database Structure**:
-> - `profile`: Extended auth data.
-> - `vendors`: Store info linked to profiles.
-> - `products`: Managed by vendors, searchable by category.
-> - `orders`: Single table using JSONB for line items to avoid complex multi-table insert failures during payment.
-> - `cart`: Persistent database-backed shopping cart.
-> 
-> **Rules**: No mock data. Connect directly to Supabase. Implement RLS policies for every table. Use storage buckets for images."
+### 2. Synchronization Strategy
+The `ShopContext` acts as the central brain. It:
+- Detects the Supabase schema dynamically.
+- Synchronizes Auth sessions with the `profile` table.
+- Parallelizes marketplace data fetching (Products, Vendors, Orders) using `Promise.all`.
+- Handles real-time cart updates with `localStorage` fallback for offline-first responsiveness.
 
 ---
 
-## 🛠️ SQL Initialization Script
+## 🗄️ Database Schema & SQL Scripts
+
+Copy and run this in your Supabase SQL Editor:
 
 ```sql
--- 1. Tables Creation
-create table public.profile (
-  id uuid references auth.users on delete cascade primary key,
-  email text unique not null,
-  full_name text,
-  role text default 'buyer' check (role in ('buyer', 'vendor', 'admin')),
-  avatar_url text,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+-- 1. PROFILES Table
+CREATE TABLE IF NOT EXISTS public.profile (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    email TEXT UNIQUE NOT NULL,
+    full_name TEXT,
+    role TEXT DEFAULT 'buyer' CHECK (role IN ('buyer', 'vendor', 'admin')),
+    avatar_url TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
 );
 
-create table public.vendors (
-  id uuid default gen_random_uuid() primary key,
-  user_id uuid references public.profile(id) on delete cascade not null,
-  store_name text not null,
-  store_slug text unique not null,
-  description text,
-  logo_url text,
-  banner_url text,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+-- 2. VENDORS Table
+CREATE TABLE IF NOT EXISTS public.vendors (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE UNIQUE,
+    store_name TEXT NOT NULL,
+    store_slug TEXT UNIQUE NOT NULL,
+    logo_url TEXT,
+    banner_url TEXT,
+    description TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
 );
 
-create table public.products (
-  id uuid default gen_random_uuid() primary key,
-  vendor_id uuid references public.vendors(id) on delete cascade not null,
-  title text not null,
-  slug text unique not null,
-  description text,
-  price numeric not null,
-  stock integer default 0,
-  category text,
-  image_urls text[] default '{}',
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+-- 3. PRODUCTS Table
+CREATE TABLE IF NOT EXISTS public.products (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    vendor_id UUID REFERENCES public.vendors(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    slug TEXT UNIQUE NOT NULL,
+    description TEXT,
+    price DECIMAL(10, 2) NOT NULL,
+    stock INTEGER DEFAULT 1,
+    category TEXT NOT NULL,
+    image_urls JSONB DEFAULT '[]'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT now()
 );
 
-create table public.orders (
-  id uuid default gen_random_uuid() primary key,
-  buyer_id uuid references public.profile(id) on delete set null,
-  total_price numeric not null,
-  status text default 'pending', -- 'pending', 'paid', 'shipped', 'delivered'
-  shipping_address text not null,
-  customer_email text,
-  payment_reference text,
-  items jsonb not null default '[]'::jsonb, -- Unified line items
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+-- 4. CART Table
+CREATE TABLE IF NOT EXISTS public.cart (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    product_id UUID REFERENCES public.products(id) ON DELETE CASCADE,
+    quantity INTEGER DEFAULT 1,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    UNIQUE(user_id, product_id)
 );
 
-create table public.cart (
-  id uuid default gen_random_uuid() primary key,
-  user_id uuid references public.profile(id) on delete cascade not null,
-  product_id uuid references public.products(id) on delete cascade not null,
-  quantity integer default 1,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+-- 5. ORDERS Table
+CREATE TABLE IF NOT EXISTS public.orders (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    buyer_id UUID REFERENCES auth.users(id),
+    total_price DECIMAL(12, 2) NOT NULL,
+    status TEXT DEFAULT 'paid', 
+    shipping_address TEXT NOT NULL,
+    customer_email TEXT,
+    payment_reference TEXT,
+    items JSONB NOT NULL DEFAULT '[]'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 2. Security (RLS)
-alter table public.profile enable row level security;
-alter table public.vendors enable row level security;
-alter table public.products enable row level security;
-alter table public.orders enable row level security;
-alter table public.cart enable row level security;
+-- ==========================================
+-- POLICIES (RLS)
+-- ==========================================
 
-create policy "Profiles visible to all" on public.profile for select using (true);
-create policy "Users update own profile" on public.profile for update using (auth.uid() = id);
+-- Enable RLS
+ALTER TABLE public.profile ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.vendors ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.cart ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 
-create policy "Vendors visible to all" on public.vendors for select using (true);
-create policy "Vendors manage own store" on public.vendors for all using (user_id = auth.uid());
-
-create policy "Products visible to all" on public.products for select using (true);
-create policy "Vendors manage products" on public.products for all using (
-  exists (select 1 from public.vendors v where v.id = vendor_id and v.user_id = auth.uid())
+-- Product Policy (Public View, Vendor Manage)
+CREATE POLICY "Public Read Products" ON public.products FOR SELECT USING (true);
+CREATE POLICY "Vendors Manage Products" ON public.products ALL USING (
+    vendor_id IN (SELECT id FROM public.vendors WHERE user_id = auth.uid())
 );
 
-create policy "Buyers view own orders" on public.orders for select using (auth.uid() = buyer_id);
-create policy "Buyers create orders" on public.orders for insert with check (auth.uid() = buyer_id);
+-- Cart Policy (Private)
+CREATE POLICY "Users Manage Cart" ON public.cart ALL USING (auth.uid() = user_id);
 
-create policy "Users manage own cart" on public.cart for all using (auth.uid() = user_id);
-
--- 3. Storage Buckets
--- Create 'product-images', 'store-assets', and 'receipts' buckets manually in UI or via API
--- Ensure 'product-images' is public.
+-- Order Policy (Private Buyer, Relevant Vendor)
+CREATE POLICY "Buyers Manage Orders" ON public.orders FOR SELECT USING (auth.uid() = buyer_id);
+CREATE POLICY "Buyers Create Orders" ON public.orders FOR INSERT WITH CHECK (auth.uid() = buyer_id);
+CREATE POLICY "Vendors Fulfillment" ON public.orders FOR SELECT USING (
+    EXISTS (
+        SELECT 1 FROM jsonb_array_elements(items) as item 
+        WHERE (item->>'vendor_id')::text = (
+            SELECT id::text FROM public.vendors WHERE user_id = auth.uid() LIMIT 1
+        )
+    )
+);
 ```

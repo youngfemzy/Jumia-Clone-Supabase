@@ -1,9 +1,11 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useShop } from '../context/ShopContext';
 import { Package, Truck, CheckCircle, Clock, ShoppingBag, MapPin, ChevronRight } from 'lucide-react';
 import { Order } from '../types';
 
-export const DashboardBuyer: React.FC<{ onNavigate: (view: string, params?: any) => void }> = ({ onNavigate }) => {
+export const DashboardBuyer: React.FC = () => {
+  const navigate = useNavigate();
   const { orders, currentUser } = useShop();
 
   const userOrders = orders.filter(o => o.buyer_id === currentUser?.id);
@@ -58,7 +60,10 @@ export const DashboardBuyer: React.FC<{ onNavigate: (view: string, params?: any)
               Your purchase history is currently empty. Start shopping the latest deals now!
             </p>
           </div>
-          <button className="bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs uppercase tracking-widest px-8 py-3 rounded-lg transition shadow-md shadow-orange-500/10 cursor-pointer active:scale-95">
+          <button 
+            onClick={() => navigate('/')}
+            className="bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs uppercase tracking-widest px-8 py-3 rounded-lg transition shadow-md shadow-orange-500/10 cursor-pointer active:scale-95"
+          >
             BROWSE MARKETPLACE
           </button>
         </div>
@@ -100,7 +105,7 @@ export const DashboardBuyer: React.FC<{ onNavigate: (view: string, params?: any)
 
                   <div className="md:border-l border-gray-100 md:pl-6 flex items-center">
                     <button 
-                      onClick={() => onNavigate('order-confirmation', { orderId: order.id })}
+                      onClick={() => navigate(`/order-confirmation/${order.id}`)}
                       className="w-full md:w-auto px-6 py-2.5 bg-gray-50 hover:bg-gray-100 text-gray-700 text-[10px] font-extrabold uppercase tracking-widest rounded-lg transition flex items-center justify-center space-x-2 cursor-pointer"
                     >
                       <span>View Details</span>

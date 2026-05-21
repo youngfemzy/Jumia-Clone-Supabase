@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useShop } from '../context/ShopContext';
 import { useToast } from '../context/ToastContext';
 import { CreditCard, MapPin, Truck, CheckCircle2, ArrowLeft, Database, Phone, User as UserIcon, RefreshCw } from 'lucide-react';
-import { usePaystackPayment } from 'react-paystack';
 
-interface ViewCheckoutProps {
-  onNavigate: (view: string, params?: any) => void;
+declare global {
+  interface Window {
+    PaystackPop: any;
+  }
 }
 
-export const ViewCheckout: React.FC<ViewCheckoutProps> = ({ onNavigate }) => {
+export const ViewCheckout: React.FC = () => {
+  const navigate = useNavigate();
   const { cartItems, cartTotal, placeOrder, updateOrderPayment, clearCart, currentUser } = useShop();
   const { success: toastSuccess, error: toastError, warning: toastWarning, info: toastInfo } = useToast();
 
@@ -32,21 +35,11 @@ export const ViewCheckout: React.FC<ViewCheckoutProps> = ({ onNavigate }) => {
   useEffect(() => {
     if (placedOrderId) {
       window.scrollTo(0, 0);
-      onNavigate('order-confirmation', { orderId: placedOrderId });
+      navigate(`/order-confirmation/${placedOrderId}`);
     }
-  }, [placedOrderId, onNavigate]);
+  }, [placedOrderId, navigate]);
 
   const cartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
-
-  // Paystack Config
-  const paystackConfig = {
-    reference: (new Date()).getTime().toString(),
-    email: currentUser?.email || "customer@example.com",
-    amount: Math.round(cartTotal * 100), // Amount in kobo
-    publicKey: (import.meta.env.VITE_PAYSTACK_PUBLIC_KEY as string) || 'pk_test_your_fallback_key_here',
-  };
-
-  const initializePayment = usePaystackPayment(paystackConfig);
 
   const handleSuccess = async (reference: any) => {
     console.log("[Paystack EVENT] handleSuccess reached:", reference);
@@ -83,6 +76,39 @@ export const ViewCheckout: React.FC<ViewCheckoutProps> = ({ onNavigate }) => {
     console.log("[Paystack EVENT] handleClose reached - Popup dismissed.");
     setSubmitting(false);
     toastInfo("Payment window closed. Your order is safely saved as 'pending' in your account.");
+  };
+
+  const triggerPaystackPop = (orderId: string) => {
+    if (!window.PaystackPop) {
+      toastError("Payment gateway could not be loaded. Please refresh.");
+      setSubmitting(false);
+      return;
+    }
+
+    const paystackConfig = {
+      key: (import.meta.env.VITE_PAYSTACK_PUBLIC_KEY as string) || 'pk_test_your_fallback_key_here',
+      email: currentUser?.email || "customer@example.com",
+      amount: Math.round(cartTotal * 100), // Amount in kobo
+      ref: (new Date()).getTime().toString(),
+      metadata: {
+        custom_fields: [
+          {
+            display_name: "Order ID",
+            variable_name: "order_id",
+            value: orderId
+          }
+        ]
+      },
+      callback: (response: any) => {
+        handleSuccess(response);
+      },
+      onClose: () => {
+        handleClose();
+      }
+    };
+
+    const handler = window.PaystackPop.setup(paystackConfig);
+    handler.openIframe();
   };
 
   const finalizeOrder = async (ref?: string, status: string = 'pending') => {
@@ -125,11 +151,8 @@ export const ViewCheckout: React.FC<ViewCheckoutProps> = ({ onNavigate }) => {
           setPendingOrderId(res.orderId);
           console.log("[Checkout] Initiating Paystack Popup for order:", res.orderId);
           
-          // In react-paystack v6.0.0, initializePayment takes an object
-          initializePayment({
-            onSuccess: handleSuccess,
-            onClose: handleClose
-          });
+          // 2. Trigger Paystack directly via window object
+          triggerPaystackPop(res.orderId);
         } else {
           toastError(res.error || "Could not initialize order. Please try again.");
           setSubmitting(false);
@@ -185,9 +208,9 @@ export const ViewCheckout: React.FC<ViewCheckoutProps> = ({ onNavigate }) => {
           <button 
             onClick={() => {
               if (currentUser?.role === 'vendor') {
-                onNavigate('vendor-dashboard', { tab: 'orders' });
+                navigate('/vendor-dashboard?tab=orders');
               } else {
-                onNavigate('dashboard', { tab: 'orders' });
+                navigate('/dashboard?tab=orders');
               }
             }}
             className="w-full py-2.5 bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold rounded-lg transition shadow-md flex items-center justify-center"
@@ -195,7 +218,7 @@ export const ViewCheckout: React.FC<ViewCheckoutProps> = ({ onNavigate }) => {
             Track My Order Status
           </button>
           <button 
-            onClick={() => onNavigate('home')}
+            onClick={() => navigate('/')}
             className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-bold rounded-lg transition"
           >
             Continue Shopping
@@ -211,7 +234,7 @@ export const ViewCheckout: React.FC<ViewCheckoutProps> = ({ onNavigate }) => {
       <div className="max-w-7xl mx-auto px-4 py-24 text-center">
         <p className="text-gray-400 text-sm">Please put something in your cart before checkout.</p>
         <button 
-          onClick={() => onNavigate('home')}
+          onClick={() => navigate('/')}
           className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-6 rounded mt-4"
         >
           Browse listings
@@ -225,7 +248,7 @@ export const ViewCheckout: React.FC<ViewCheckoutProps> = ({ onNavigate }) => {
       
       {/* Back to Cart info */}
       <button 
-        onClick={() => onNavigate('cart')}
+        onClick={() => navigate('/cart')}
         className="inline-flex items-center text-xs font-bold text-gray-500 hover:text-gray-900 uppercase transition mb-6"
       >
         <ArrowLeft className="w-4 h-4 mr-1.5" /> Return to Cart

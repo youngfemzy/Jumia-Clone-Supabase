@@ -1,12 +1,10 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useShop } from '../context/ShopContext';
 import { ShoppingBag, Trash2, ArrowLeft, ShieldAlert, Plus, Minus, Tag } from 'lucide-react';
 
-interface ViewCartProps {
-  onNavigate: (view: string, params?: any) => void;
-}
-
-export const ViewCart: React.FC<ViewCartProps> = ({ onNavigate }) => {
+export const ViewCart: React.FC = () => {
+  const navigate = useNavigate();
   const { cartItems, updateCartQuantity, removeFromCart, cartTotal, clearCart } = useShop();
 
   const cartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
@@ -49,7 +47,7 @@ export const ViewCart: React.FC<ViewCartProps> = ({ onNavigate }) => {
                           {product.category}
                         </span>
                         <h3 
-                          onClick={() => onNavigate('product-detail', { productId: product.id })}
+                          onClick={() => navigate(`/product/${product.id}`)}
                           className="font-bold text-gray-800 text-xs sm:text-sm hover:underline hover:text-orange-500 cursor-pointer line-clamp-2 max-w-md leading-snug"
                         >
                           {product.title}
@@ -101,7 +99,7 @@ export const ViewCart: React.FC<ViewCartProps> = ({ onNavigate }) => {
 
             <div className="flex justify-between items-center text-xs">
               <button 
-                onClick={() => onNavigate('home')}
+                onClick={() => navigate('/')}
                 className="inline-flex items-center text-gray-500 hover:text-gray-900 font-bold uppercase transition"
               >
                 <ArrowLeft className="w-4 h-4 mr-1.5" /> Continue Shopping
@@ -159,7 +157,7 @@ export const ViewCart: React.FC<ViewCartProps> = ({ onNavigate }) => {
               </div>
 
               <button
-                onClick={() => onNavigate('checkout')}
+                onClick={() => navigate('/checkout')}
                 className="w-full bg-orange-500 hover:bg-orange-600 text-white font-extrabold text-xs uppercase tracking-wider py-3.5 rounded-lg transition active:scale-95 cursor-pointer shadow-md shadow-orange-500/10 flex items-center justify-center space-x-1.5"
               >
                 <span>Proceed to Checkout</span>
@@ -188,7 +186,7 @@ export const ViewCart: React.FC<ViewCartProps> = ({ onNavigate }) => {
             Ready to shop? Explore our top electronic appliances, fashion wears, groceries, and gaming catalogs.
           </p>
           <button
-            onClick={() => onNavigate('home')}
+            onClick={() => navigate('/')}
             className="bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs uppercase px-5 py-2.5 rounded transition shadow-sm cursor-pointer"
           >
             Start Shopping Now

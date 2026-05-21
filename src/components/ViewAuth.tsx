@@ -1,14 +1,12 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useShop } from '../context/ShopContext';
 import { useToast } from '../context/ToastContext';
 import { UserRole } from '../types';
 import { ShieldCheck, Mail, Lock, User as UserIcon, Store, Sparkles, AlertCircle } from 'lucide-react';
 
-interface ViewAuthProps {
-  onNavigate: (view: string, params?: any) => void;
-}
-
-export const ViewAuth: React.FC<ViewAuthProps> = ({ onNavigate }) => {
+export const ViewAuth: React.FC = () => {
+  const navigate = useNavigate();
   const { signIn, signUp, currentUser } = useShop();
   const { success: toastSuccess, error: toastError } = useToast();
 
@@ -43,11 +41,7 @@ export const ViewAuth: React.FC<ViewAuthProps> = ({ onNavigate }) => {
             setRegisteredEmail(email);
             setShowVerificationPending(true);
           } else {
-            if (role === 'vendor') {
-              onNavigate('vendor-dashboard');
-            } else {
-              onNavigate('home');
-            }
+            navigate('/dashboard');
           }
         } else {
           setErrorMessage(res.error || "Signup error occurred.");
@@ -56,7 +50,7 @@ export const ViewAuth: React.FC<ViewAuthProps> = ({ onNavigate }) => {
         const res = await signIn(email, password);
         if (res.success) {
           toastSuccess("Signed in successfully!");
-          onNavigate('home');
+          navigate('/dashboard');
         } else {
           toastError(res.error || "Authentication rejected, check coordinates.");
           setErrorMessage(res.error || "Authentication rejected, check coordinates.");

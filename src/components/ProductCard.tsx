@@ -1,14 +1,15 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Product } from '../types';
 import { useShop } from '../context/ShopContext';
 import { Star, ShoppingCart, Tag, Store } from 'lucide-react';
 
 interface ProductCardProps {
   product: Product;
-  onNavigate: (view: string, params?: any) => void;
 }
 
-export const ProductCard: React.FC<ProductCardProps> = ({ product, onNavigate }) => {
+export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
+  const navigate = useNavigate();
   const { addToCart, vendors } = useShop();
 
   const storeName = vendors.find(v => v.id === product.vendor_id)?.store_name || 'Official Reseller';
@@ -29,7 +30,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onNavigate })
 
   return (
     <div 
-      onClick={() => onNavigate('product-detail', { productId: product.id })}
+      onClick={() => navigate(`/product/${product.id}`)}
       className="bg-white rounded-lg border border-gray-100 hover:shadow-lg transition-all duration-300 flex flex-col h-full cursor-pointer relative overflow-hidden group hover:-translate-y-1"
       id={`product-card-${product.id}`}
     >
@@ -64,7 +65,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onNavigate })
           <span 
             onClick={(e) => {
               e.stopPropagation();
-              onNavigate('storefront', { vendorId: product.vendor_id });
+              navigate(`/store/${product.vendor_id}`);
             }}
             className="text-orange-600 hover:text-orange-700 hover:underline flex items-center transition truncate"
             title={`View storefront ${storeName}`}

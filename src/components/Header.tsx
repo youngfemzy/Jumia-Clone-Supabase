@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useShop } from '../context/ShopContext';
 import { CATEGORIES } from '../types';
 import { 
@@ -7,27 +8,21 @@ import {
   User, 
   Store, 
   ShieldCheck, 
-  Settings, 
-  ArrowLeft, 
   LogOut, 
   Sparkles,
   Database,
   Check
 } from 'lucide-react';
 
-interface HeaderProps {
-  activeView: string;
-  onNavigate: (view: string, params?: any) => void;
-}
-
-export const Header: React.FC<HeaderProps> = ({ activeView, onNavigate }) => {
+export const Header: React.FC = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
   const { 
     currentUser, 
     currentVendor, 
     signOut, 
     updateRole, 
     cartItems, 
-    cartTotal, 
     isConnected,
     supabaseConfigured,
     searchQuery,
@@ -40,16 +35,18 @@ export const Header: React.FC<HeaderProps> = ({ activeView, onNavigate }) => {
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setSearchQuery(localSearch);
-    onNavigate('category', { search: localSearch });
+    navigate(`/category?search=${encodeURIComponent(localSearch)}`);
   };
 
   const handleCategoryClick = (cat: string) => {
     setSearchQuery('');
     setLocalSearch('');
-    onNavigate('category', { category: cat });
+    navigate(`/category/${cat}`);
   };
 
   const cartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
+
+  const activeView = location.pathname;
 
   return (
     <header className="w-full bg-white shadow-xs sticky top-0 z-50">
@@ -85,7 +82,7 @@ export const Header: React.FC<HeaderProps> = ({ activeView, onNavigate }) => {
           onClick={() => {
             setSearchQuery('');
             setLocalSearch('');
-            onNavigate('home');
+            navigate('/');
           }}
           className="flex items-center space-x-2 cursor-pointer select-none shrink-0"
         >
@@ -163,30 +160,30 @@ export const Header: React.FC<HeaderProps> = ({ activeView, onNavigate }) => {
                   )}
 
                   <button 
-                    onClick={() => { setShowRoleSelector(false); onNavigate('buyer-dashboard'); }}
+                    onClick={() => { setShowRoleSelector(false); navigate('/dashboard'); }}
                     className="w-full text-left px-4 py-1.5 text-xs hover:bg-gray-50 flex items-center justify-between"
                   >
                     <span className="flex items-center"><User className="w-3.5 h-3.5 mr-2" /> My Orders</span>
-                    {activeView === 'buyer-dashboard' && <Check className="w-3.5 h-3.5 text-orange-500" />}
+                    {activeView === '/dashboard' && <Check className="w-3.5 h-3.5 text-orange-500" />}
                   </button>
 
                   {(currentUser.role === 'vendor' || currentUser.role === 'admin') && (
                     <button 
-                      onClick={() => { setShowRoleSelector(false); onNavigate('vendor-dashboard'); }}
+                      onClick={() => { setShowRoleSelector(false); navigate('/vendor-dashboard'); }}
                       className="w-full text-left px-4 py-1.5 text-xs hover:bg-gray-50 flex items-center justify-between"
                     >
                       <span className="flex items-center"><Store className="w-3.5 h-3.5 mr-2" /> Vendor Dashboard</span>
-                      {activeView === 'vendor-dashboard' && <Check className="w-3.5 h-3.5 text-orange-500" />}
+                      {activeView === '/vendor-dashboard' && <Check className="w-3.5 h-3.5 text-orange-500" />}
                     </button>
                   )}
 
                   {currentUser.role === 'admin' && (
                     <button 
-                      onClick={() => { setShowRoleSelector(false); onNavigate('admin-dashboard'); }}
+                      onClick={() => { setShowRoleSelector(false); navigate('/admin'); }}
                       className="w-full text-left px-4 py-1.5 text-xs hover:bg-gray-50 flex items-center justify-between"
                     >
                       <span className="flex items-center"><ShieldCheck className="w-3.5 h-3.5 mr-2" /> Admin Panel</span>
-                      {activeView === 'admin-dashboard' && <Check className="w-3.5 h-3.5 text-orange-500" />}
+                      {activeView === '/admin' && <Check className="w-3.5 h-3.5 text-orange-500" />}
                     </button>
                   )}
 
@@ -196,13 +193,13 @@ export const Header: React.FC<HeaderProps> = ({ activeView, onNavigate }) => {
                       <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mb-2">Admin Tools</p>
                       <div className="flex gap-2">
                          <button 
-                          onClick={() => { updateRole('buyer'); setShowRoleSelector(false); onNavigate('home'); }}
+                          onClick={() => { updateRole('buyer'); setShowRoleSelector(false); navigate('/'); }}
                           className={`flex-1 py-1.5 rounded text-[9px] font-bold uppercase transition border ${currentUser.role === 'buyer' ? 'bg-orange-500 text-white border-orange-500 shadow-sm shadow-orange-500/20' : 'bg-gray-50 text-gray-500 border-gray-200'}`}
                          >
                            to Buyer
                          </button>
                          <button 
-                          onClick={() => { updateRole('vendor'); setShowRoleSelector(false); onNavigate('vendor-dashboard'); }}
+                          onClick={() => { updateRole('vendor'); setShowRoleSelector(false); navigate('/vendor-dashboard'); }}
                           className={`flex-1 py-1.5 rounded text-[9px] font-bold uppercase transition border ${currentUser.role === 'vendor' ? 'bg-orange-500 text-white border-orange-500 shadow-sm shadow-orange-500/20' : 'bg-gray-50 text-gray-500 border-gray-200'}`}
                          >
                            to Vendor
@@ -214,7 +211,7 @@ export const Header: React.FC<HeaderProps> = ({ activeView, onNavigate }) => {
                   {/* Dashboard routing buttons */}
                   {currentUser.role === 'vendor' && (
                     <button 
-                      onClick={() => { setShowRoleSelector(false); onNavigate('vendor-dashboard'); }}
+                      onClick={() => { setShowRoleSelector(false); navigate('/vendor-dashboard'); }}
                       className="w-full text-left px-4 py-2 text-sm text-orange-600 hover:bg-orange-50 font-medium border-t border-gray-100"
                     >
                       Go to Store Dashboard
@@ -222,37 +219,37 @@ export const Header: React.FC<HeaderProps> = ({ activeView, onNavigate }) => {
                   )}
                   {currentUser.role === 'admin' && (
                     <button 
-                      onClick={() => { setShowRoleSelector(false); onNavigate('admin-dashboard'); }}
+                      onClick={() => { setShowRoleSelector(false); navigate('/admin'); }}
                       className="w-full text-left px-4 py-2 text-sm text-amber-600 hover:bg-amber-50 font-medium border-t border-gray-100"
                     >
                       Go to Admin Panel
                     </button>
                   )}
 
-                  <button 
-                    onClick={() => { signOut(); setShowRoleSelector(false); }}
-                    className="w-full text-left px-4 py-2 text-xs text-red-600 hover:bg-red-50 border-t border-gray-100 flex items-center mt-1"
-                  >
-                    <LogOut className="w-3.5 h-3.5 mr-2" /> Sign Out
-                  </button>
-                </div>
-              )}
-            </div>
-          ) : (
-            <button 
-              onClick={() => onNavigate('auth')}
-              className="flex items-center space-x-1.5 hover:text-orange-500 hover:bg-orange-50 border border-gray-200 px-3.5 py-1.5 rounded-md text-sm font-semibold transition"
-            >
-              <User className="w-4.5 h-4.5 text-orange-500" />
-              <span className="hidden sm:inline">Sign In</span>
-            </button>
-          )}
-
-          {/* Cart Icon */}
-          <div 
-            onClick={() => onNavigate('cart')}
-            className="flex items-center space-x-2 cursor-pointer group hover:text-orange-500 transition py-1 relative"
+          <button 
+            onClick={() => signOut()}
+            className="w-full text-left px-4 py-2 text-xs text-red-600 hover:bg-red-50 border-t border-gray-100 flex items-center mt-1"
           >
+            <LogOut className="w-3.5 h-3.5 mr-2" /> Sign Out
+          </button>
+        </div>
+      )}
+    </div>
+  ) : (
+    <button 
+      onClick={() => navigate('/auth')}
+      className="flex items-center space-x-1.5 hover:text-orange-500 hover:bg-orange-50 border border-gray-200 px-3.5 py-1.5 rounded-md text-sm font-semibold transition"
+    >
+      <User className="w-4.5 h-4.5 text-orange-500" />
+      <span className="hidden sm:inline">Sign In</span>
+    </button>
+  )}
+
+  {/* Cart Icon */}
+  <div 
+    onClick={() => navigate('/cart')}
+    className="flex items-center space-x-2 cursor-pointer group hover:text-orange-500 transition py-1 relative"
+  >
             <div className="relative">
               <ShoppingCart className="w-6 h-6 text-gray-700 group-hover:text-orange-500 transition-colors" />
               {cartCount > 0 && (

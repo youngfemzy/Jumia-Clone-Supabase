@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useShop } from '../context/ShopContext';
 import { 
   Home, 
@@ -9,23 +10,22 @@ import {
   Package
 } from 'lucide-react';
 
-interface BottomNavigationProps {
-  onNavigate: (view: string, params?: any) => void;
-  activeView: string;
-}
-
-export const BottomNavigation: React.FC<BottomNavigationProps> = ({ onNavigate, activeView }) => {
+export const BottomNavigation: React.FC = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
   const { cartItems, currentUser } = useShop();
   const cartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
+
+  const activeView = location.pathname;
 
   return (
     <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 shadow-lg px-6 py-2 flex items-center justify-between z-40">
       
       {/* Home Button */}
       <button 
-        onClick={() => onNavigate('home')}
+        onClick={() => navigate('/')}
         className={`flex flex-col items-center select-none active:scale-90 transition ${
-          activeView === 'home' ? 'text-orange-500' : 'text-gray-400 hover:text-gray-600'
+          activeView === '/' ? 'text-orange-500' : 'text-gray-400 hover:text-gray-600'
         }`}
       >
         <Home className="w-5 h-5" />
@@ -34,9 +34,9 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({ onNavigate, 
 
       {/* Shop Categories */}
       <button 
-        onClick={() => onNavigate('category')}
+        onClick={() => navigate('/category')}
         className={`flex flex-col items-center select-none active:scale-90 transition ${
-          activeView === 'category' ? 'text-orange-500' : 'text-gray-400 hover:text-gray-600'
+          activeView.startsWith('/category') ? 'text-orange-500' : 'text-gray-400 hover:text-gray-600'
         }`}
       >
         <Grid className="w-5 h-5" />
@@ -45,9 +45,9 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({ onNavigate, 
 
       {/* Cart Button */}
       <button 
-        onClick={() => onNavigate('cart')}
+        onClick={() => navigate('/cart')}
         className={`flex flex-col items-center select-none active:scale-90 transition relative ${
-          activeView === 'cart' ? 'text-orange-500' : 'text-gray-400 hover:text-gray-600'
+          activeView === '/cart' ? 'text-orange-500' : 'text-gray-400 hover:text-gray-600'
         }`}
       >
         <div className="relative">
@@ -64,9 +64,9 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({ onNavigate, 
       {/* Vendor portal / Dashboard portal depending on privilege status */}
       {currentUser?.role === 'vendor' ? (
         <button 
-          onClick={() => onNavigate('vendor-dashboard')}
+          onClick={() => navigate('/vendor-dashboard')}
           className={`flex flex-col items-center select-none active:scale-90 transition ${
-            activeView === 'vendor-dashboard' ? 'text-orange-500' : 'text-gray-400 hover:text-gray-600'
+            activeView === '/vendor-dashboard' ? 'text-orange-500' : 'text-gray-400 hover:text-gray-600'
           }`}
         >
           <Store className="w-5 h-5" />
@@ -74,9 +74,9 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({ onNavigate, 
         </button>
       ) : currentUser?.role === 'admin' ? (
         <button 
-          onClick={() => onNavigate('admin-dashboard')}
+          onClick={() => navigate('/admin')}
           className={`flex flex-col items-center select-none active:scale-90 transition ${
-            activeView === 'admin-dashboard' ? 'text-orange-500' : 'text-gray-400 hover:text-gray-600'
+            activeView === '/admin' ? 'text-orange-500' : 'text-gray-400 hover:text-gray-600'
           }`}
         >
           <ShieldCheck className="w-5 h-5" />
@@ -84,9 +84,9 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({ onNavigate, 
         </button>
       ) : (
         <button 
-          onClick={() => onNavigate(currentUser ? 'buyer-dashboard' : 'auth')}
+          onClick={() => navigate(currentUser ? '/dashboard' : '/auth')}
           className={`flex flex-col items-center select-none active:scale-90 transition ${
-            activeView === 'auth' || activeView === 'buyer-dashboard' ? 'text-orange-500' : 'text-gray-400 hover:text-gray-600'
+            activeView === '/auth' || activeView === '/dashboard' ? 'text-orange-500' : 'text-gray-400 hover:text-gray-600'
           }`}
         >
           {currentUser ? <Package className="w-5 h-5" /> : <Store className="w-5 h-5" />}

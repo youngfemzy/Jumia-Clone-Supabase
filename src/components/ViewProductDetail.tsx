@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useShop } from '../context/ShopContext';
 import { useToast } from '../context/ToastContext';
 import { ProductCard } from './ProductCard';
@@ -16,12 +17,9 @@ import {
   Share2
 } from 'lucide-react';
 
-interface ViewProductDetailProps {
-  productId: string;
-  onNavigate: (view: string, params?: any) => void;
-}
-
-export const ViewProductDetail: React.FC<ViewProductDetailProps> = ({ productId, onNavigate }) => {
+export const ViewProductDetail: React.FC = () => {
+  const { productId } = useParams<{ productId: string }>();
+  const navigate = useNavigate();
   const { products, addToCart, vendors } = useShop();
   const { success: toastSuccess } = useToast();
   const [quantity, setQuantity] = useState(1);
@@ -57,7 +55,7 @@ export const ViewProductDetail: React.FC<ViewProductDetailProps> = ({ productId,
       <div className="max-w-7xl mx-auto px-4 py-24 text-center">
         <p className="text-gray-500 text-sm">Product details unavailable or item deleted.</p>
         <button 
-          onClick={() => onNavigate('home')}
+          onClick={() => navigate('/')}
           className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-6 rounded mt-4 cursor-pointer"
         >
           Return to Marketplace
@@ -87,9 +85,9 @@ export const ViewProductDetail: React.FC<ViewProductDetailProps> = ({ productId,
       
       {/* Category Navigation Breadcrumbs */}
       <div className="flex items-center space-x-2 text-xs text-gray-400 font-semibold mb-6">
-        <span className="hover:text-gray-600 transition cursor-pointer" onClick={() => onNavigate('home')}>Marketplace</span>
+        <span className="hover:text-gray-600 transition cursor-pointer" onClick={() => navigate('/')}>Marketplace</span>
         <span>/</span>
-        <span className="hover:text-gray-600 transition cursor-pointer" onClick={() => onNavigate('category', { category: product.category })}>{product.category}</span>
+        <span className="hover:text-gray-600 transition cursor-pointer" onClick={() => navigate(`/category/${product.category}`)}>{product.category}</span>
         <span>/</span>
         <span className="text-gray-600 truncate max-w-xs">{product.title}</span>
       </div>
@@ -138,7 +136,7 @@ export const ViewProductDetail: React.FC<ViewProductDetailProps> = ({ productId,
             {/* Vendor Redirect Label */}
             {vendor && (
               <div 
-                onClick={() => onNavigate('storefront', { vendorId: vendor.id })}
+                onClick={() => navigate(`/store/${vendor.id}`)}
                 className="inline-flex items-center space-x-1.5 text-xs font-bold text-orange-600 hover:text-orange-700 hover:underline cursor-pointer py-1 block"
               >
                 <Store className="w-4 h-4 shrink-0" />
@@ -305,7 +303,7 @@ export const ViewProductDetail: React.FC<ViewProductDetailProps> = ({ productId,
               </div>
 
               <button
-                onClick={() => onNavigate('storefront', { vendorId: vendor.id })}
+                onClick={() => navigate(`/store/${vendor.id}`)}
                 className="w-full py-2 border border-orange-500 hover:bg-orange-500 hover:text-white text-orange-600 text-xs font-bold rounded-lg transition active:scale-95 cursor-pointer"
               >
                 Explore Partner Store
@@ -325,7 +323,7 @@ export const ViewProductDetail: React.FC<ViewProductDetailProps> = ({ productId,
               <Tag className="w-4 h-4 text-orange-500 mr-2" /> You may also like (Similar items)
             </h2>
             <button 
-              onClick={() => onNavigate('category', { category: product.category })}
+              onClick={() => navigate(`/category/${product.category}`)}
               className="text-orange-500 hover:text-orange-600 font-bold text-xs uppercase transition hover:underline"
             >
               See All Items
@@ -334,7 +332,7 @@ export const ViewProductDetail: React.FC<ViewProductDetailProps> = ({ productId,
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
             {relatedProducts.map((p) => (
-              <ProductCard key={p.id} product={p} onNavigate={onNavigate} />
+              <ProductCard key={p.id} product={p} />
             ))}
           </div>
         </div>
